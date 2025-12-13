@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { authService } from '@/services/authService';
 import { preferencesService } from '@/services/preferencesService';
 import { imageProcessingService } from '@/services/imageProcessingService';
@@ -33,6 +34,8 @@ const mockWardrobeItems: WardrobeItem[] = [
 ];
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
@@ -40,13 +43,19 @@ export default function DashboardPage() {
   const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
   const [filterScrollPosition, setFilterScrollPosition] = useState(0);
   const [activeNav, setActiveNav] = useState('wardrobe');
+  
+  // Check if we're on the calendar page
+  useEffect(() => {
+    if (window.location.pathname === '/calendar') {
+      setActiveNav('calendar');
+    }
+  }, []);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showClothingItemModal, setShowClothingItemModal] = useState(false);
   const [processedImage, setProcessedImage] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState<'uploading' | 'classifying' | 'removing-bg' | 'uploading-result' | null>(null);
-  const [isTraining, setIsTraining] = useState(false);
-
+  
   const categories = [
     { id: 'ALL', name: 'ALL', icon: '/images/icons/hanger.png' },
     { id: 'TOPS', name: 'TOPS', icon: '/images/icons/tops.png' },
@@ -54,6 +63,7 @@ export default function DashboardPage() {
     { id: 'SHOES', name: 'SHOES', icon: '/images/icons/shoes.png' },
     { id: 'DRESS', name: 'DRESS', icon: '/images/icons/dress.png' },
     { id: 'SKIRTS', name: 'SKIRTS', icon: '/images/icons/skirt.png' },
+    { id: 'BAGS', name: 'BAGS', icon: '/images/icons/bags.png' },
     { id: 'JEWELRY', name: 'JEWELRY', icon: '/images/icons/necklace.png' },
     { id: 'HATS', name: 'HATS', icon: '/images/icons/hat.png' },
     { id: 'NAILS', name: 'NAILS', icon: '/images/icons/nail.png' },
@@ -109,6 +119,45 @@ export default function DashboardPage() {
 
     fetchUser();
   }, []);
+
+  // Update URL based on active navigation and selected category
+  useEffect(() => {
+    const currentPath = window.location.pathname;
+    const currentSearch = window.location.search;
+    
+    // Don't redirect if we're on calendar page
+    if (currentPath === '/calendar') {
+      return;
+    }
+    
+    const basePath = activeNav === 'wardrobe' ? '/dashboard/wardrobe' : '/dashboard';
+    
+    // Build search params based on selected category
+    const searchParams = new URLSearchParams();
+    if (selectedCategory !== 'ALL' && activeNav === 'wardrobe') {
+      searchParams.set('category', selectedCategory.toLowerCase());
+    }
+    
+    const newSearch = searchParams.toString();
+    const expectedUrl = basePath + (newSearch ? `?${newSearch}` : '');
+    const currentUrl = currentPath + currentSearch;
+    
+    if (currentUrl !== expectedUrl) {
+      router.replace(expectedUrl);
+    }
+  }, [activeNav, selectedCategory, router]);
+
+  // Sync selected category from URL on mount and URL changes
+  useEffect(() => {
+    const categoryFromUrl = searchParams.get('category');
+    if (categoryFromUrl && activeNav === 'wardrobe') {
+      const categoryUpper = categoryFromUrl.toUpperCase();
+      const validCategory = categories.find(cat => cat.id === categoryUpper);
+      if (validCategory) {
+        setSelectedCategory(categoryUpper);
+      }
+    }
+  }, [searchParams, activeNav]);
 
   const handleQuestionnaireSubmit = async (data: any) => {
     try {
@@ -192,29 +241,7 @@ export default function DashboardPage() {
     setProcessedImage(null);
   };
 
-  const handleTrainModel = async () => {
-    setIsTraining(true);
-    try {
-      const response = await fetch('/api/train-model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ epochs: 20 })
-      });
-      
-      const result = await response.json();
-      if (result.success) {
-        alert('Model training completed successfully!');
-      } else {
-        alert('Training failed: ' + result.error);
-      }
-    } catch (error) {
-      console.error('Training error:', error);
-      alert('Training failed. Please check console for details.');
-    } finally {
-      setIsTraining(false);
-    }
-  };
-
+  
   const filteredItems = selectedCategory === 'ALL' 
     ? wardrobeItems 
     : wardrobeItems.filter(item => item.category === selectedCategory);
@@ -285,26 +312,6 @@ export default function DashboardPage() {
       <div className="flex flex-col lg:flex-row">
         {/* Left Navigation Bar - Desktop Only */}
         <div className="hidden lg:flex lg:w-20 bg-white shadow-lg lg:flex-col lg:items-center lg:py-8 lg:space-y-8 lg:h-screen lg:fixed lg:left-0 lg:top-0">
-          {/* Calendar Icon */}
-          <div className="relative">
-            <button 
-              onClick={() => setActiveNav('calendar')}
-              className={`p-3 rounded-lg transition relative cursor-pointer ${
-                activeNav === 'calendar' ? 'bg-green-100' : 'hover:bg-gray-100'
-              }`}
-            >
-              <img 
-                src="/images/icons/calendar.png" 
-                alt="Calendar" 
-                className={`w-8 h-8 ${activeNav === 'calendar' ? 'filter brightness-0 saturate-100' : ''}`}
-                style={{ filter: activeNav === 'calendar' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
-              />
-            </button>
-            {activeNav === 'calendar' && (
-              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full"></div>
-            )}
-          </div>
-          
           {/* AI Styling Button */}
           <div className="relative">
             <button 
@@ -329,7 +336,7 @@ export default function DashboardPage() {
           {/* Manual Styling Hanger */}
           <div className="relative">
             <button 
-              onClick={() => setActiveNav('manual')}
+              onClick={() => window.location.href = '/dashboard/manual'}
               className={`p-3 rounded-lg transition relative cursor-pointer ${
                 activeNav === 'manual' ? 'bg-green-100' : 'hover:bg-gray-100'
               }`}
@@ -362,6 +369,29 @@ export default function DashboardPage() {
               />
             </button>
             {activeNav === 'wardrobe' && (
+              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full"></div>
+            )}
+          </div>
+          
+          {/* Calendar Icon */}
+          <div className="relative">
+            <button 
+              onClick={() => {
+                console.log('Dashboard calendar clicked');
+                window.location.href = '/calendar';
+              }}
+              className={`p-3 rounded-lg transition relative cursor-pointer ${
+                activeNav === 'calendar' ? 'bg-green-100' : 'hover:bg-gray-100'
+              }`}
+            >
+              <img 
+                src="/images/icons/calendar.png" 
+                alt="Calendar" 
+                className={`w-8 h-8 ${activeNav === 'calendar' ? 'filter brightness-0 saturate-100' : ''}`}
+                style={{ filter: activeNav === 'calendar' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
+              />
+            </button>
+            {activeNav === 'calendar' && (
               <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full"></div>
             )}
           </div>
@@ -509,25 +539,7 @@ export default function DashboardPage() {
               </svg>
             </button>
 
-            {/* Train Model Button */}
-            <button 
-              onClick={handleTrainModel}
-              disabled={isTraining}
-              className={`w-20 h-20 rounded-full flex items-center justify-center transition shadow-lg cursor-pointer ${
-                isTraining 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
-              }`}
-            >
-              {isTraining ? (
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-              ) : (
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              )}
-            </button>
-          </div>
+                      </div>
         </div>
 
         {/* Mobile Bottom Navigation */}
@@ -566,7 +578,7 @@ export default function DashboardPage() {
             
             {/* Manual Styling Hanger */}
             <button 
-              onClick={() => setActiveNav('manual')}
+              onClick={() => window.location.href = '/dashboard/manual'}
               className={`p-3 rounded-lg transition relative cursor-pointer ${
                 activeNav === 'manual' ? 'bg-green-100' : 'hover:bg-gray-100'
               }`}

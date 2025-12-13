@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
-import { cnnClassifier } from '../../../lib/cnnClassifier';
+import { clarifaiClassifier } from '../../../lib/clarifaiClassifier';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -115,39 +115,24 @@ export async function POST(request: NextRequest) {
 
 async function classifyClothing(imageBuffer: Buffer, fileName?: string) {
   try {
-    console.log('Starting CNN classification...');
+    console.log('Starting Clarifai classification...');
     
-    // Check if CNN classifier is ready
-    if (!cnnClassifier.isReady()) {
-      console.log('CNN classifier not ready, waiting...');
-      // Wait a bit for model to initialize
+    // Check if Clarifai classifier is ready
+    if (!clarifaiClassifier.isReady()) {
+      console.log('Clarifai classifier not ready, waiting...');
+      // Wait a bit for classifier to initialize
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
-    // Use CNN classifier for local classification
-    const classification = await cnnClassifier.classifyClothing(imageBuffer);
+    // Use Clarifai classifier for AI-powered classification
+    const analysis = await clarifaiClassifier.getClothingAnalysis(imageBuffer);
     
-    console.log('CNN classification result:', classification);
+    console.log('Clarifai classification result:', analysis);
     
-    // Convert CNN response to match expected format for frontend
-    return {
-      category: classification.category.toUpperCase(),
-      styles: ['Casual'], // CNN doesn't provide styles, using default
-      confidence: classification.confidence,
-      description: `${classification.predicted_label} - ${classification.confidence.toFixed(2)} confidence`,
-      colors: ['Unknown'], // CNN doesn't detect colors
-      material: 'Unknown',
-      occasion: ['daily'],
-      season: ['all-season'],
-      subcategory: classification.subcategory,
-      pattern: 'unknown',
-      primaryColor: 'unknown',
-      reasoning: 'CNN classification using Fashion-MNIST model',
-      all_predictions: classification.all_predictions
-    };
+    return analysis;
     
   } catch (error) {
-    console.error('CNN classification error:', error);
+    console.error('Clarifai classification error:', error);
     
     // Fallback to basic classification
     console.log('Using basic fallback classification');
@@ -155,9 +140,9 @@ async function classifyClothing(imageBuffer: Buffer, fileName?: string) {
       category: 'TOPS',
       styles: ['Casual'],
       confidence: 0.5,
-      description: 'CNN classification failed, using default TOPS',
+      description: 'Clarifai classification failed, using default TOPS',
       colors: ['Unknown'],
-      reasoning: 'CNN failed, using fallback classification'
+      reasoning: 'Clarifai failed, using fallback classification'
     };
   }
 }

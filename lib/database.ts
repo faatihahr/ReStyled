@@ -161,6 +161,15 @@ export async function updateOutfit(outfitId: string, updates: Partial<Outfit>) {
   return data
 }
 
+export async function deleteOutfit(outfitId: string) {
+  const { error } = await supabase
+    .from('outfits')
+    .delete()
+    .eq('id', outfitId)
+
+  if (error) throw error
+}
+
 // Outfit logs functions
 export async function logOutfitUsage(logData: {
   user_id: string

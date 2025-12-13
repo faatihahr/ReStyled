@@ -165,5 +165,26 @@ export const authService = {
         callback(null)
       }
     })
+  },
+
+  // Verify JWT token and return user
+  async verifyToken(token: string): Promise<User | null> {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(token)
+      
+      if (error || !user) {
+        return null
+      }
+
+      return {
+        id: user.id,
+        email: user.email!,
+        name: user.user_metadata?.name || user.email?.split('@')[0] || '',
+        username: user.user_metadata?.username || '',
+        created_at: user.created_at
+      }
+    } catch (error) {
+      return null
+    }
   }
 };
