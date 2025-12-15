@@ -8,6 +8,8 @@ import { imageProcessingService } from '@/services/imageProcessingService';
 import QuestionnaireModal from '@/components/QuestionnaireModal';
 import UploadModal from '@/components/UploadModal';
 import ClothingItemModal from '@/components/ClothingItemModal';
+import AIStylingModal from '@/components/AIStylingModal';
+import OutfitDisplayModal from '@/components/OutfitDisplayModal';
 
 interface WardrobeItem {
   id: string;
@@ -41,8 +43,7 @@ export default function DashboardPage() {
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
-  const [filterScrollPosition, setFilterScrollPosition] = useState(0);
-  const [activeNav, setActiveNav] = useState('wardrobe');
+    const [activeNav, setActiveNav] = useState('wardrobe');
   
   // Check if we're on the calendar page
   useEffect(() => {
@@ -55,6 +56,13 @@ export default function DashboardPage() {
   const [processedImage, setProcessedImage] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState<'uploading' | 'classifying' | 'removing-bg' | 'uploading-result' | null>(null);
+  
+  // AI Styling states
+  const [showAIStylingModal, setShowAIStylingModal] = useState(false);
+  const [showOutfitDisplayModal, setShowOutfitDisplayModal] = useState(false);
+  const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
+  const [recommendedOutfits, setRecommendedOutfits] = useState<any[]>([]);
+  const [currentOccasion, setCurrentOccasion] = useState<string>();
   
   const categories = [
     { id: 'ALL', name: 'ALL', icon: '/images/icons/hanger.png' },
@@ -241,31 +249,58 @@ export default function DashboardPage() {
     setProcessedImage(null);
   };
 
+  // AI Styling handler
+  const handleAIStyling = async (occasion?: string) => {
+    setIsGeneratingOutfit(true);
+    setShowAIStylingModal(false);
+    setCurrentOccasion(occasion);
+    setShowOutfitDisplayModal(true); // Open modal immediately with loading state
+    
+    try {
+      const token = await authService.getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('/api/ai-style', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ occasion }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate outfit');
+      }
+
+      const result = await response.json();
+      console.log('AI styling result:', result);
+      
+      setRecommendedOutfits(result.outfits || []);
+      
+    } catch (error) {
+      console.error('Error generating outfit:', error);
+      alert('Failed to generate outfit. Please try again.');
+    } finally {
+      setIsGeneratingOutfit(false);
+    }
+  };
+
   
   const filteredItems = selectedCategory === 'ALL' 
     ? wardrobeItems 
     : wardrobeItems.filter(item => item.category === selectedCategory);
 
-  const scrollFilters = (direction: 'left' | 'right') => {
-    const filterContainer = document.getElementById('filter-container');
-    if (filterContainer) {
-      const scrollAmount = 200; // Adjust scroll amount as needed
-      if (direction === 'right') {
-        filterContainer.scrollLeft += scrollAmount;
-      } else {
-        filterContainer.scrollLeft -= scrollAmount;
-      }
-      setFilterScrollPosition(filterContainer.scrollLeft);
-    }
-  };
-
+  
   const navigateToNextCategory = () => {
     const currentIndex = categories.findIndex(cat => cat.id === selectedCategory);
     const nextIndex = (currentIndex + 1) % categories.length;
     const nextCategory = categories[nextIndex];
     
     setSelectedCategory(nextCategory.id);
-    scrollToCategory(nextCategory.id);
   };
 
   const navigateToPreviousCategory = () => {
@@ -274,31 +309,9 @@ export default function DashboardPage() {
     const prevCategory = categories[prevIndex];
     
     setSelectedCategory(prevCategory.id);
-    scrollToCategory(prevCategory.id);
   };
 
-  const scrollToCategory = (categoryId: string) => {
-    const filterContainer = document.getElementById('filter-container');
-    const categoryElement = document.getElementById(`category-${categoryId}`);
-    
-    if (filterContainer && categoryElement) {
-      const containerRect = filterContainer.getBoundingClientRect();
-      const elementRect = categoryElement.getBoundingClientRect();
-      
-      const scrollLeft = filterContainer.scrollLeft + 
-                        (elementRect.left - containerRect.left) - 
-                        (containerRect.width / 2) + 
-                        (elementRect.width / 2);
-      
-      filterContainer.scrollTo({
-        left: scrollLeft,
-        behavior: 'smooth'
-      });
-      
-      setFilterScrollPosition(scrollLeft);
-    }
-  };
-
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#aace67] via-pink-100 to-[#ffa4a4] flex items-center justify-center" style={{ fontFamily: 'Merriweather, serif' }}>
@@ -315,7 +328,7 @@ export default function DashboardPage() {
           {/* AI Styling Button */}
           <div className="relative">
             <button 
-              onClick={() => setActiveNav('ai')}
+              onClick={() => setShowAIStylingModal(true)}
               className={`p-4 rounded-full transition relative cursor-pointer ${
                 activeNav === 'ai' 
                   ? 'bg-green-500 shadow-lg' 
@@ -418,13 +431,11 @@ export default function DashboardPage() {
             {/* Category Filters */}
             <div className="mb-6 lg:mb-8">
               <div className="flex items-center gap-2 lg:gap-4">
-                {/* Scrollable filter container matching card grid width */}
+                {/* Filter container - no scroll needed for max 4 cards */}
                 <div 
-                  id="filter-container"
-                  className="flex-1 overflow-x-auto scrollbar-hide"
-                  style={{ maxWidth: 'calc(100% - 40px)' }}
+                  className="flex-1 flex justify-center"
                 >
-                  <div className="flex items-center space-x-2 lg:space-x-4 pb-2 justify-end" style={{ minWidth: '600px' }}>
+                  <div className="flex items-center space-x-2 lg:space-x-4 pb-2">
                     {categories.map((category) => (
                       <div key={category.id} id={`category-${category.id}`} className="flex flex-col items-center">
                         <button
@@ -477,8 +488,8 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Wardrobe Items Grid - Responsive and Scrollable */}
-            <div className="overflow-y-auto pb-20 lg:pb-0" style={{ height: 'calc(100vh - 240px)' }}>
+            {/* Wardrobe Items Grid - Responsive without Scroll */}
+            <div className="pb-20 lg:pb-0">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                 {filteredItems.map((item) => (
                   <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 hover:scale-105">
@@ -562,7 +573,7 @@ export default function DashboardPage() {
             
             {/* AI Styling Button */}
             <button 
-              onClick={() => setActiveNav('ai')}
+              onClick={() => setShowAIStylingModal(true)}
               className={`p-3 rounded-full transition relative cursor-pointer ${
                 activeNav === 'ai' 
                   ? 'bg-green-500 shadow-lg' 
@@ -681,9 +692,26 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* AI Styling Modal */}
+      <AIStylingModal
+        isOpen={showAIStylingModal}
+        onClose={() => setShowAIStylingModal(false)}
+        onGenerateOutfit={handleAIStyling}
+        isGenerating={isGeneratingOutfit}
+      />
+
+      {/* Outfit Display Modal */}
+      <OutfitDisplayModal
+        isOpen={showOutfitDisplayModal}
+        onClose={() => setShowOutfitDisplayModal(false)}
+        outfits={recommendedOutfits}
+        occasion={currentOccasion}
+        isLoading={isGeneratingOutfit}
+      />
+
       {/* Processing Overlay */}
       {isProcessing && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-gradient-to-br from-[#aace67]/30 via-pink-200/30 to-[#ffa4a4]/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mb-4"></div>

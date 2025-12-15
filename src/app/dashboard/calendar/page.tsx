@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { authService } from '@/services/authService';
 import { preferencesService } from '@/services/preferencesService';
 import QuestionnaireModal from '@/components/QuestionnaireModal';
+import AIStylingModal from '@/components/AIStylingModal';
+import OutfitDisplayModal from '@/components/OutfitDisplayModal';
 
 
 export default function CalendarPage() {
@@ -18,6 +20,13 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
   const [savedOutfits, setSavedOutfits] = useState<any[]>([]);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  
+  // AI Styling states
+  const [showAIStylingModal, setShowAIStylingModal] = useState(false);
+  const [showOutfitDisplayModal, setShowOutfitDisplayModal] = useState(false);
+  const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
+  const [recommendedOutfits, setRecommendedOutfits] = useState<any[]>([]);
+  const [currentOccasion, setCurrentOccasion] = useState<string>();
 
   // Load outfits from localStorage only (temporary fix for 401 error)
   const loadOutfits = useCallback(() => {
@@ -104,6 +113,46 @@ export default function CalendarPage() {
 
   const handleQuestionnaireSkip = () => {
     setShowQuestionnaire(false);
+  };
+
+  // AI Styling handler
+  const handleAIStyling = async (occasion?: string) => {
+    setIsGeneratingOutfit(true);
+    setShowAIStylingModal(false);
+    setCurrentOccasion(occasion);
+    setShowOutfitDisplayModal(true); // Open modal immediately with loading state
+    
+    try {
+      const token = await authService.getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('/api/ai-style', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ occasion }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate outfit');
+      }
+
+      const result = await response.json();
+      console.log('AI styling result:', result);
+      
+      setRecommendedOutfits(result.outfits || []);
+      
+    } catch (error) {
+      console.error('Error generating outfit:', error);
+      alert('Failed to generate outfit. Please try again.');
+    } finally {
+      setIsGeneratingOutfit(false);
+    }
   };
 
   // Filter outfits for selected date or show all if no date selected
@@ -211,7 +260,7 @@ export default function CalendarPage() {
         router.push('/dashboard/wardrobe');
         break;
       case 'ai':
-        // For now, stay on calendar as AI section isn't implemented yet
+        setShowAIStylingModal(true);
         break;
       case 'manual':
         router.push('/dashboard/manual');
@@ -764,6 +813,23 @@ export default function CalendarPage() {
         onClose={() => setShowQuestionnaire(false)}
         onSubmit={handleQuestionnaireSubmit}
         onSkip={handleQuestionnaireSkip}
+      />
+
+      {/* AI Styling Modal */}
+      <AIStylingModal
+        isOpen={showAIStylingModal}
+        onClose={() => setShowAIStylingModal(false)}
+        onGenerateOutfit={handleAIStyling}
+        isGenerating={isGeneratingOutfit}
+      />
+
+      {/* Outfit Display Modal */}
+      <OutfitDisplayModal
+        isOpen={showOutfitDisplayModal}
+        onClose={() => setShowOutfitDisplayModal(false)}
+        outfits={recommendedOutfits}
+        occasion={currentOccasion}
+        isLoading={isGeneratingOutfit}
       />
     </div>
   );

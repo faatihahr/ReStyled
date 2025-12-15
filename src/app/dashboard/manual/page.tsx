@@ -9,6 +9,8 @@ import { imageProcessingService } from '@/services/imageProcessingService';
 import { supabase } from '@/services/authService';
 import QuestionnaireModal from '@/components/QuestionnaireModal';
 import OutfitCanvasModal from '@/components/OutfitCanvasModal';
+import AIStylingModal from '@/components/AIStylingModal';
+import OutfitDisplayModal from '@/components/OutfitDisplayModal';
 
 interface WardrobeItem {
   id: string;
@@ -66,6 +68,13 @@ export default function ManualStylingPage() {
   const [favorites, setFavorites] = useState(new Set());
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [editingOutfit, setEditingOutfit] = useState<any>(null);
+  
+  // AI Styling states
+  const [showAIStylingModal, setShowAIStylingModal] = useState(false);
+  const [showOutfitDisplayModal, setShowOutfitDisplayModal] = useState(false);
+  const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
+  const [recommendedOutfits, setRecommendedOutfits] = useState<any[]>([]);
+  const [currentOccasion, setCurrentOccasion] = useState<string>();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -187,6 +196,46 @@ export default function ManualStylingPage() {
     setShowQuestionnaire(false);
   };
 
+  // AI Styling handler
+  const handleAIStyling = async (occasion?: string) => {
+    setIsGeneratingOutfit(true);
+    setShowAIStylingModal(false);
+    setCurrentOccasion(occasion);
+    setShowOutfitDisplayModal(true); // Open modal immediately with loading state
+    
+    try {
+      const token = await authService.getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('/api/ai-style', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ occasion }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate outfit');
+      }
+
+      const result = await response.json();
+      console.log('AI styling result:', result);
+      
+      setRecommendedOutfits(result.outfits || []);
+      
+    } catch (error) {
+      console.error('Error generating outfit:', error);
+      alert('Failed to generate outfit. Please try again.');
+    } finally {
+      setIsGeneratingOutfit(false);
+    }
+  };
+
   const handleNavigation = (section: string) => {
     setActiveNav(section);
     switch (section) {
@@ -194,6 +243,7 @@ export default function ManualStylingPage() {
         router.push('/dashboard/wardrobe');
         break;
       case 'ai':
+        setShowAIStylingModal(true);
         break;
       case 'manual':
         router.push('/dashboard/manual');
@@ -899,6 +949,23 @@ export default function ManualStylingPage() {
           isEditingMode={isEditingMode}
         />
       )}
+
+      {/* AI Styling Modal */}
+      <AIStylingModal
+        isOpen={showAIStylingModal}
+        onClose={() => setShowAIStylingModal(false)}
+        onGenerateOutfit={handleAIStyling}
+        isGenerating={isGeneratingOutfit}
+      />
+
+      {/* Outfit Display Modal */}
+      <OutfitDisplayModal
+        isOpen={showOutfitDisplayModal}
+        onClose={() => setShowOutfitDisplayModal(false)}
+        outfits={recommendedOutfits}
+        occasion={currentOccasion}
+        isLoading={isGeneratingOutfit}
+      />
       </div>
     </div>
   );
