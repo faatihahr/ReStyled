@@ -63,7 +63,7 @@ export default function AIStylingModal({
                 value={occasion}
                 onChange={(e) => setOccasion(e.target.value)}
                 placeholder="Contoh: ke kampus, meeting, kencan, jalan-jalan..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#aace67] focus:border-transparent outline-none transition cursor-pointer"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#aace67] focus:border-transparent outline-none transition cursor-text"
                 disabled={isGenerating}
               />
             </div>

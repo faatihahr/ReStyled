@@ -25,6 +25,7 @@ interface OutfitDisplayModalProps {
   outfits: Outfit[];
   occasion?: string;
   isLoading?: boolean;
+  onSaveToCanvas?: (outfit: Outfit) => void;
 }
 
 export default function OutfitDisplayModal({ 
@@ -32,7 +33,8 @@ export default function OutfitDisplayModal({
   onClose, 
   outfits, 
   occasion,
-  isLoading = false 
+  isLoading = false,
+  onSaveToCanvas
 }: OutfitDisplayModalProps) {
   const [selectedOutfit, setSelectedOutfit] = useState<number>(0);
 
@@ -181,8 +183,9 @@ export default function OutfitDisplayModal({
             <div className="flex gap-3 pt-4 border-t border-gray-200">
               <button
                 onClick={() => {
-                  // TODO: Implement save outfit functionality
-                  console.log('Save outfit:', currentOutfit);
+                  if (onSaveToCanvas && currentOutfit) {
+                    onSaveToCanvas(currentOutfit);
+                  }
                 }}
                 className="flex-1 bg-gradient-to-r from-[#aace67] to-pink-400 text-white py-2 px-4 rounded-lg hover:shadow-lg transition"
               >

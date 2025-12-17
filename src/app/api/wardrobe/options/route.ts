@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   try {
     // Return default categories and styles
-    const categories = ['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS'];
+    const categories = ['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS', 'OUTERWEAR'];
     const styles = ['Casual', 'Classic', 'Chic', 'Streetwear', 'Preppy', 'Vintage Retro', 'Y2K', 'Minimalist', 'Formal', 'Bohemian'];
 
     return NextResponse.json({

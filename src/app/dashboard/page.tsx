@@ -10,6 +10,8 @@ import UploadModal from '@/components/UploadModal';
 import ClothingItemModal from '@/components/ClothingItemModal';
 import AIStylingModal from '@/components/AIStylingModal';
 import OutfitDisplayModal from '@/components/OutfitDisplayModal';
+import OutfitCanvasModal from '@/components/OutfitCanvasModal';
+import ToastNotification from '@/components/ToastNotification';
 
 interface WardrobeItem {
   id: string;
@@ -60,9 +62,13 @@ export default function DashboardPage() {
   // AI Styling states
   const [showAIStylingModal, setShowAIStylingModal] = useState(false);
   const [showOutfitDisplayModal, setShowOutfitDisplayModal] = useState(false);
+  const [showOutfitCanvasModal, setShowOutfitCanvasModal] = useState(false);
   const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
   const [recommendedOutfits, setRecommendedOutfits] = useState<any[]>([]);
   const [currentOccasion, setCurrentOccasion] = useState<string>();
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [selectedAIOutfit, setSelectedAIOutfit] = useState<any>(null);
   
   const categories = [
     { id: 'ALL', name: 'ALL', icon: '/images/icons/hanger.png' },
@@ -281,11 +287,100 @@ export default function DashboardPage() {
       
       setRecommendedOutfits(result.outfits || []);
       
+      // Show info if response was from cache or fallback
+      if (result.cached) {
+        console.log('Using cached AI response');
+      }
+      if (result.message) {
+        console.log('AI message:', result.message);
+      }
+      
     } catch (error) {
       console.error('Error generating outfit:', error);
       alert('Failed to generate outfit. Please try again.');
     } finally {
       setIsGeneratingOutfit(false);
+    }
+  };
+
+  // Handle saving AI outfit to canvas
+  const handleSaveAIOutfitToCanvas = (outfit: any) => {
+    console.log('Saving AI outfit to canvas:', outfit);
+    
+    // Convert AI outfit items to canvas format
+    const canvasItems = outfit.itemDetails.map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      imageUrl: item.processed_image_url,
+      position: { x: 0, y: 0 }, // Will be positioned by canvas
+      size: { width: 120, height: 120 }
+    }));
+    
+    setSelectedAIOutfit({
+      ...outfit,
+      canvasItems: canvasItems
+    });
+    
+    setShowOutfitDisplayModal(false);
+    setShowOutfitCanvasModal(true);
+  };
+
+  // Handle saving outfit from canvas to calendar/database
+  const handleSaveOutfitFromCanvas = async (savedOutfit: any) => {
+    console.log('Saving outfit from canvas:', savedOutfit);
+    
+    try {
+      const token = await authService.getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      // Convert canvas outfit to database format
+      const clothingItemIds = savedOutfit.items.map((item: any) => item.id);
+      
+      const outfitData = {
+        name: savedOutfit.name,
+        description: selectedAIOutfit?.description || `AI-generated outfit for ${currentOccasion || 'casual'}`,
+        clothing_item_ids: clothingItemIds,
+        occasion: currentOccasion || 'casual',
+        season: 'all',
+        canvas_image: savedOutfit.canvasImage,
+        ai_generated: true
+      };
+
+      const response = await fetch('/api/outfits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(outfitData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save outfit');
+      }
+
+      const result = await response.json();
+      console.log('Outfit saved successfully:', result);
+      
+      // Close canvas modal and reset state
+      setShowOutfitCanvasModal(false);
+      setSelectedAIOutfit(null);
+      
+      // Show success notification and redirect to calendar
+      setToast({ message: 'Outfit berhasil disimpan ke kalender!', type: 'success' });
+      
+      // Redirect to calendar after a short delay
+      setTimeout(() => {
+        router.push('/dashboard/calendar');
+      }, 1500);
+      
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+      setToast({ message: 'Gagal menyimpan outfit. Silakan coba lagi.', type: 'error' });
     }
   };
 
@@ -707,7 +802,22 @@ export default function DashboardPage() {
         outfits={recommendedOutfits}
         occasion={currentOccasion}
         isLoading={isGeneratingOutfit}
+        onSaveToCanvas={handleSaveAIOutfitToCanvas}
       />
+
+      {/* Outfit Canvas Modal */}
+      {selectedAIOutfit && (
+        <OutfitCanvasModal
+          isOpen={showOutfitCanvasModal}
+          onClose={() => {
+            setShowOutfitCanvasModal(false);
+            setSelectedAIOutfit(null);
+          }}
+          currentOutfit={selectedAIOutfit.canvasItems || []}
+          wardrobeItems={wardrobeItems}
+          onSave={handleSaveOutfitFromCanvas}
+        />
+      )}
 
       {/* Processing Overlay */}
       {isProcessing && (
@@ -720,6 +830,15 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <ToastNotification
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );

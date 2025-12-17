@@ -26,10 +26,11 @@ const CATEGORY_MAPPING: { [key: string]: { category: string; subcategory: string
   'leggings': { category: 'bottoms', subcategory: 'leggings' },
   
   // Dresses
-  'dress': { category: 'dresses', subcategory: 'dress' },
-  'gown': { category: 'dresses', subcategory: 'gown' },
-  'maxi dress': { category: 'dresses', subcategory: 'maxi-dress' },
-  'mini dress': { category: 'dresses', subcategory: 'mini-dress' },
+  'dress': { category: 'dress', subcategory: 'dress' },
+  'dresses': { category: 'dress', subcategory: 'dress' },
+  'gown': { category: 'dress', subcategory: 'gown' },
+  'maxi dress': { category: 'dress', subcategory: 'maxi-dress' },
+  'mini dress': { category: 'dress', subcategory: 'mini-dress' },
   
   // Outerwear
   'coat': { category: 'outerwear', subcategory: 'coat' },
@@ -45,6 +46,14 @@ const CATEGORY_MAPPING: { [key: string]: { category: string; subcategory: string
   'heels': { category: 'shoes', subcategory: 'heels' },
   'flats': { category: 'shoes', subcategory: 'flats' },
   
+  // Jewelry
+  'necklace': { category: 'jewelry', subcategory: 'necklace' },
+  'chain': { category: 'jewelry', subcategory: 'necklace' },
+  'bracelet': { category: 'jewelry', subcategory: 'bracelet' },
+  'earrings': { category: 'jewelry', subcategory: 'earrings' },
+  'ring': { category: 'jewelry', subcategory: 'ring' },
+  'jewelry': { category: 'jewelry', subcategory: 'jewelry' },
+  
   // Accessories
   'bag': { category: 'accessories', subcategory: 'bag' },
   'handbag': { category: 'accessories', subcategory: 'handbag' },
@@ -56,7 +65,6 @@ const CATEGORY_MAPPING: { [key: string]: { category: string; subcategory: string
   'scarf': { category: 'accessories', subcategory: 'scarf' },
   'belt': { category: 'accessories', subcategory: 'belt' },
   'watch': { category: 'accessories', subcategory: 'watch' },
-  'jewelry': { category: 'accessories', subcategory: 'jewelry' },
   
   // Default fallback
   'clothing': { category: 'tops', subcategory: 'top' },

@@ -121,7 +121,7 @@ export default function LoginPage() {
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#aace67] focus:border-transparent transition duration-200"
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#aace67] focus:border-transparent transition duration-200 cursor-text"
                 placeholder="Enter your email or username"
                 required
               />
@@ -136,7 +136,7 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#aace67] focus:border-transparent transition duration-200"
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#aace67] focus:border-transparent transition duration-200 cursor-text"
                 placeholder="Enter your password"
                 required
               />

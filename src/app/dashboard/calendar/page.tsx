@@ -7,6 +7,7 @@ import { preferencesService } from '@/services/preferencesService';
 import QuestionnaireModal from '@/components/QuestionnaireModal';
 import AIStylingModal from '@/components/AIStylingModal';
 import OutfitDisplayModal from '@/components/OutfitDisplayModal';
+import OutfitCanvasModal from '@/components/OutfitCanvasModal';
 
 
 export default function CalendarPage() {
@@ -24,16 +25,72 @@ export default function CalendarPage() {
   // AI Styling states
   const [showAIStylingModal, setShowAIStylingModal] = useState(false);
   const [showOutfitDisplayModal, setShowOutfitDisplayModal] = useState(false);
+  const [showOutfitCanvasModal, setShowOutfitCanvasModal] = useState(false);
   const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
   const [recommendedOutfits, setRecommendedOutfits] = useState<any[]>([]);
   const [currentOccasion, setCurrentOccasion] = useState<string>();
+  const [selectedAIOutfit, setSelectedAIOutfit] = useState<any>(null);
 
-  // Load outfits from localStorage only (temporary fix for 401 error)
-  const loadOutfits = useCallback(() => {
+  // Load outfits from both localStorage and database
+  const loadOutfits = useCallback(async () => {
     try {
+      // Load from localStorage first
       const localOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
       console.log('Loaded outfits from localStorage:', localOutfits.length);
-      setSavedOutfits(localOutfits);
+      
+      // Try to load from database
+      try {
+        const token = await authService.getToken();
+        if (token) {
+          const response = await fetch('/api/outfits', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const dbOutfits = data.outfits || [];
+            console.log('Loaded outfits from database:', dbOutfits.length);
+            
+            // Convert database outfits to calendar format and merge with local outfits
+            const formattedDbOutfits = dbOutfits.map((outfit: any) => ({
+              id: outfit.id,
+              name: outfit.name,
+              canvasImage: outfit.canvas_image,
+              canvas_image: outfit.canvas_image,
+              date: outfit.created_at,
+              createdAt: outfit.created_at,
+              items: outfit.clothing_item_ids || [],
+              clothing_item_ids: outfit.clothing_item_ids || [],
+              ai_generated: outfit.ai_generated
+            }));
+            
+            // Combine outfits, prioritizing database outfits for same IDs
+            const allOutfits = [...localOutfits];
+            formattedDbOutfits.forEach((dbOutfit: any) => {
+              const existingIndex = allOutfits.findIndex(local => local.id === dbOutfit.id);
+              if (existingIndex >= 0) {
+                allOutfits[existingIndex] = dbOutfit;
+              } else {
+                allOutfits.push(dbOutfit);
+              }
+            });
+            
+            setSavedOutfits(allOutfits);
+            console.log('Total outfits after merge:', allOutfits.length);
+          } else {
+            console.log('Failed to fetch from database, using localStorage only');
+            setSavedOutfits(localOutfits);
+          }
+        } else {
+          console.log('No auth token, using localStorage only');
+          setSavedOutfits(localOutfits);
+        }
+      } catch (dbError) {
+        console.log('Database fetch failed, using localStorage only:', dbError);
+        setSavedOutfits(localOutfits);
+      }
     } catch (error) {
       console.error('Error loading outfits:', error);
       setSavedOutfits([]);
@@ -115,7 +172,81 @@ export default function CalendarPage() {
     setShowQuestionnaire(false);
   };
 
-  // AI Styling handler
+  // Handle saving AI outfit to canvas
+  const handleSaveAIOutfitToCanvas = (outfit: any) => {
+    console.log('Saving AI outfit to canvas:', outfit);
+    
+    // Convert AI outfit items to canvas format
+    const canvasItems = outfit.itemDetails.map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      category: item.category,
+      imageUrl: item.processed_image_url,
+      position: { x: 0, y: 0 }, // Will be positioned by canvas
+      size: { width: 120, height: 120 }
+    }));
+    
+    setSelectedAIOutfit({
+      ...outfit,
+      canvasItems: canvasItems
+    });
+    
+    setShowOutfitDisplayModal(false);
+    setShowOutfitCanvasModal(true);
+  };
+
+  // Handle saving outfit from canvas to calendar/database
+  const handleSaveOutfitFromCanvas = async (savedOutfit: any) => {
+    console.log('Saving outfit from canvas:', savedOutfit);
+    
+    try {
+      const token = await authService.getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      // Convert canvas outfit to database format
+      const clothingItemIds = savedOutfit.items.map((item: any) => item.id);
+      
+      const outfitData = {
+        name: savedOutfit.name,
+        description: selectedAIOutfit?.description || `AI-generated outfit for ${currentOccasion || 'casual'}`,
+        clothing_item_ids: clothingItemIds,
+        occasion: currentOccasion || 'casual',
+        season: 'all',
+        canvas_image: savedOutfit.canvasImage,
+        ai_generated: true
+      };
+
+      const response = await fetch('/api/outfits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(outfitData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save outfit');
+      }
+
+      const result = await response.json();
+      console.log('Outfit saved successfully:', result);
+      
+      // Close canvas modal and reset state
+      setShowOutfitCanvasModal(false);
+      setSelectedAIOutfit(null);
+      
+      // Reload outfits to show the new one
+      loadOutfits();
+      
+    } catch (error) {
+      console.error('Error saving outfit:', error);
+      alert('Failed to save outfit. Please try again.');
+    }
+  };
   const handleAIStyling = async (occasion?: string) => {
     setIsGeneratingOutfit(true);
     setShowAIStylingModal(false);
@@ -246,6 +377,112 @@ export default function CalendarPage() {
       setSavedOutfits(updatedOutfits);
       localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
       setActiveDropdown(null);
+    }
+  };
+
+  // Handle sharing outfit to WhatsApp and Telegram
+  const handleShareOutfit = async (outfit: any) => {
+    try {
+      const canvasImage = outfit.canvasImage || outfit.canvas_image;
+      if (!canvasImage) {
+        alert('No outfit image available to share');
+        return;
+      }
+
+      // Check if Web Share API is supported
+      if (navigator.share) {
+        try {
+          // Convert base64 to blob
+          const response = await fetch(canvasImage);
+          const blob = await response.blob();
+          const file = new File([blob], 'outfit.png', { type: 'image/png' });
+
+          // Use Web Share API
+          await navigator.share({
+            title: 'My Outfit',
+            text: 'Check out my outfit!',
+            files: [file]
+          });
+          
+          setActiveDropdown(null);
+          return;
+        } catch (shareError) {
+          console.log('Web Share API failed, falling back to manual share options');
+        }
+      }
+
+      // Fallback to manual share options
+      const shareOptions = [
+        { 
+          name: 'WhatsApp', 
+          action: () => {
+            const text = 'Check out my outfit!';
+            const url = `https://wa.me/?text=${encodeURIComponent(text)} ${encodeURIComponent(canvasImage)}`;
+            window.open(url, '_blank');
+          }
+        },
+        { 
+          name: 'Telegram', 
+          action: () => {
+            const text = 'Check out my outfit!';
+            const url = `https://t.me/share/url?url=${encodeURIComponent(canvasImage)}&text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+          }
+        }
+      ];
+
+      // Show share options
+      const shareMenu = document.createElement('div');
+      shareMenu.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      shareMenu.innerHTML = `
+        <div class="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+          <h3 class="text-lg font-semibold mb-4">Share Outfit</h3>
+          <div class="space-y-2">
+            ${shareOptions.map((option, index) => `
+              <button id="share-btn-${index}" class="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition flex items-center space-x-3">
+                <span class="font-medium">${option.name}</span>
+              </button>
+            `).join('')}
+          </div>
+          <button id="cancel-share" class="w-full mt-4 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition">
+            Cancel
+          </button>
+        </div>
+      `;
+      
+      document.body.appendChild(shareMenu);
+      
+      // Add event listeners
+      shareOptions.forEach((option, index) => {
+        const btn = document.getElementById(`share-btn-${index}`);
+        if (btn) {
+          btn.addEventListener('click', () => {
+            console.log(`Opening ${option.name}...`);
+            option.action();
+            shareMenu.remove();
+          });
+        }
+      });
+      
+      const cancelBtn = document.getElementById('cancel-share');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+          shareMenu.remove();
+        });
+      }
+      
+      // Close on backdrop click
+      shareMenu.addEventListener('click', (e) => {
+        if (e.target === shareMenu) {
+          shareMenu.remove();
+        }
+      });
+      
+      setActiveDropdown(null);
+      
+    } catch (error) {
+      console.error('Error sharing outfit:', error);
+      alert('Failed to share outfit');
     }
   };
 
@@ -592,7 +829,7 @@ export default function CalendarPage() {
                         
                         {/* Dropdown menu */}
                         {activeDropdown === outfit.id && (
-                          <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                          <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                             <button
                               onClick={(e) => {
                                 e?.stopPropagation();
@@ -603,6 +840,15 @@ export default function CalendarPage() {
                               className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition rounded-t-lg"
                             >
                               Edit
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e?.stopPropagation();
+                                handleShareOutfit(outfit);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition"
+                            >
+                              Share
                             </button>
                             <button
                               onClick={(e) => {
@@ -830,6 +1076,18 @@ export default function CalendarPage() {
         outfits={recommendedOutfits}
         occasion={currentOccasion}
         isLoading={isGeneratingOutfit}
+        onSaveToCanvas={handleSaveAIOutfitToCanvas}
+      />
+
+      {/* Outfit Canvas Modal */}
+      <OutfitCanvasModal
+        isOpen={showOutfitCanvasModal}
+        onClose={() => setShowOutfitCanvasModal(false)}
+        currentOutfit={selectedAIOutfit?.canvasItems || []}
+        wardrobeItems={[]} // TODO: Load wardrobe items if needed
+        onSave={handleSaveOutfitFromCanvas}
+        editingOutfit={null}
+        isEditingMode={false}
       />
     </div>
   );

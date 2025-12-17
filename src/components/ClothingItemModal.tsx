@@ -24,6 +24,15 @@ export default function ClothingItemModal({
   const [styleOptions, setStyleOptions] = useState<string[]>([]);
 
   useEffect(() => {
+    // Reset form when modal opens with new image
+    if (isOpen && processedImage) {
+      setItemName('');
+      setSelectedCategory(processedImage.detectedCategory);
+      setSelectedStyles(processedImage.suggestedStyles || []);
+    }
+  }, [isOpen, processedImage]);
+
+  useEffect(() => {
     // Load categories and styles
     const loadOptions = async () => {
       try {
@@ -34,7 +43,7 @@ export default function ClothingItemModal({
       } catch (error) {
         console.error('Failed to load options:', error);
         // Fallback options
-        setCategories(['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS']);
+        setCategories(['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS', 'OUTERWEAR']);
         setStyleOptions(['Casual', 'Classic', 'Chic', 'Streetwear', 'Preppy', 'Vintage Retro', 'Y2K', 'Minimalist', 'Formal', 'Bohemian']);
       }
     };
@@ -142,7 +151,7 @@ export default function ClothingItemModal({
                   value={itemName}
                   onChange={(e) => setItemName(e.target.value)}
                   placeholder="e.g., White Cotton Shirt"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 cursor-text"
                 />
               </div>
 

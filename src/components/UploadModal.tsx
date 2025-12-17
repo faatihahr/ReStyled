@@ -30,17 +30,94 @@ export default function UploadModal({ isOpen, onClose, onPhotoCapture, onFileUpl
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
+      // Check if mediaDevices is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Camera API not supported in this browser. Please use Chrome, Firefox, or Safari.');
+        return;
+      }
+
+      // Set camera active first to render the video element
+      setIsCameraActive(true);
+      
+      // Wait for the ref to be available with multiple attempts
+      let attempts = 0;
+      while (!videoRef.current && attempts < 20) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        attempts++;
+      }
+
+      // Check if video ref exists first
+      if (!videoRef.current) {
+        console.error('Video ref is null after waiting, attempts:', attempts);
+        setIsCameraActive(false);
+        alert('Camera component not ready. Please refresh and try again.');
+        return;
+      }
+
+      // Try different camera configurations
+      let stream = null;
+      const constraints = [
+        { video: { facingMode: 'environment' } },
+        { video: { facingMode: 'user' } },
+        { video: true }
+      ];
+
+      for (const constraint of constraints) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraint);
+          break;
+        } catch (err) {
+          console.log('Trying next constraint...', err);
+        }
+      }
+
+      if (!stream) {
+        throw new Error('No camera available');
+      }
+
       streamRef.current = stream;
+      
+      // Now videoRef.current should exist
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        console.log('Video stream set:', stream);
+        
+        // Wait for video to be ready
+        videoRef.current.onloadedmetadata = () => {
+          console.log('Video metadata loaded');
+          videoRef.current?.play().then(() => {
+            console.log('Video playing successfully');
+            setIsCameraActive(true);
+          }).catch(err => {
+            console.error('Video play failed:', err);
+            setIsCameraActive(true); // Still show video even if play fails
+          });
+        };
+
+        // Fallback timeout
+        setTimeout(() => {
+          if (!isCameraActive) {
+            console.log('Forcing camera active state');
+            setIsCameraActive(true);
+          }
+        }, 2000);
+      } else {
+        console.error('Video ref is null after getting stream');
+        alert('Camera component error. Please refresh and try again.');
       }
-      setIsCameraActive(true);
     } catch (error) {
       console.error('Error accessing camera:', error);
-      alert('Unable to access camera. Please check your permissions.');
+      
+      // More specific error messages
+      if (error.name === 'NotAllowedError') {
+        alert('Camera access denied. Please allow camera permissions in your browser settings and refresh the page.');
+      } else if (error.name === 'NotFoundError') {
+        alert('No camera found. Please connect a camera and try again.');
+      } else if (error.name === 'NotSupportedError') {
+        alert('Camera not supported. Please use a secure connection (https://) or localhost.');
+      } else {
+        alert(`Camera error: ${error.message || 'Unknown error occurred'}`);
+      }
     }
   };
 
@@ -146,12 +223,22 @@ export default function UploadModal({ isOpen, onClose, onPhotoCapture, onFileUpl
           <>
             {/* Camera View */}
             <div className="relative">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className="w-full rounded-lg mb-4"
-              />
+              <div className="w-full h-64 bg-gray-900 rounded-lg mb-4 flex items-center justify-center">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover rounded-lg"
+                  style={{ display: isCameraActive ? 'block' : 'none' }}
+                />
+                {!isCameraActive && (
+                  <div className="text-white text-center">
+                    <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p>Starting camera...</p>
+                  </div>
+                )}
+              </div>
               <canvas
                 ref={canvasRef}
                 className="hidden"

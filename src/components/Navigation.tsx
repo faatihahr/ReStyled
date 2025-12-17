@@ -49,13 +49,13 @@ export function Navigation() {
                   <div className="flex justify-center items-center h-24 relative">
           {/* Logo - Centered on mobile, left-centered on desktop */}
           <div className="flex items-center space-x-12 px-4">
-            <div className="flex-shrink-0 h-24">
+            <div className="flex-shrink-0 flex items-center justify-center">
               <Image
-                src="/images/ReStyled-removebg-preview.svg"
+                src="/images/Restyled.png"
                 alt="ReStyled Logo"
-                width={200}
-                height={100}
-                className="object-contain w-48 h-24"
+                width={400}
+                height={200}
+                className="object-contain w-64 h-32"
                 loading="eager"
               />
             </div>

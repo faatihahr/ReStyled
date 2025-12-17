@@ -7,21 +7,32 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const ai = new GoogleGenAI({});
+// Simple in-memory cache for AI responses (reset on server restart)
+const aiResponseCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export async function POST(request: NextRequest) {
+  // Set overall request timeout
+  const timeoutId = setTimeout(() => {
+    throw new Error('Request timeout - AI styling took too long');
+  }, 60000); // 60 seconds total timeout
+
   try {
     // Get the current user from session
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.split(' ')[1];
 
     if (!token) {
+      clearTimeout(timeoutId);
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
     // Verify user session
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) {
+      clearTimeout(timeoutId);
       return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
     }
 
@@ -37,10 +48,12 @@ export async function POST(request: NextRequest) {
 
     if (wardrobeError) {
       console.error('Database error:', wardrobeError);
+      clearTimeout(timeoutId);
       return NextResponse.json({ error: 'Failed to fetch wardrobe items' }, { status: 500 });
     }
 
     if (!wardrobeItems || wardrobeItems.length === 0) {
+      clearTimeout(timeoutId);
       return NextResponse.json({ 
         error: 'No wardrobe items found',
         message: 'Please upload some clothing items first to get AI recommendations'
@@ -63,15 +76,81 @@ export async function POST(request: NextRequest) {
       processed_image_url: item.processed_image_url
     }));
 
+    // Create cache key based on wardrobe items and occasion
+    const wardrobeSignature = wardrobeData.map(item => item.id).sort().join('-');
+    const cacheKey = `${user.id}-${wardrobeSignature}-${occasion || 'casual'}`;
+    
+    // Check cache first
+    const cached = aiResponseCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log('Returning cached AI response');
+      clearTimeout(timeoutId);
+      return NextResponse.json({
+        success: true,
+        outfits: cached.data,
+        occasion: occasion || 'casual',
+        wardrobeItemCount: wardrobeData.length,
+        cached: true
+      });
+    }
+
     const prompt = createOutfitPrompt(wardrobeData, occasion);
     
     console.log('Sending prompt to Gemini:', prompt.substring(0, 200) + '...');
 
-    // Generate outfit recommendations using Gemini
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt
-    });
+    // Generate outfit recommendations using Gemini with retry logic and timeout
+    let response;
+    let retryCount = 0;
+    const maxRetries = 2;
+    const timeoutMs = 45000; // 45 seconds timeout
+    
+    while (retryCount < maxRetries) {
+      try {
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout')), timeoutMs);
+        });
+        
+        // Race between the API call and timeout
+        const apiPromise = ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt
+        });
+        
+        response = await Promise.race([apiPromise, timeoutPromise]);
+        break; // Success, exit retry loop
+      } catch (geminiError: any) {
+        retryCount++;
+        console.log(`Gemini API attempt ${retryCount} failed:`, geminiError.message);
+        
+        // Check if it's an abort/error from timeout
+        if (geminiError.message.includes('aborted') || geminiError.message.includes('timeout')) {
+          console.log('Request was aborted/timeout, retrying...');
+        }
+        
+        if (retryCount >= maxRetries) {
+          console.log('Max retries reached, using fallback outfit');
+          const fallbackOutfit = createFallbackOutfit(wardrobeData);
+          
+          // Cache fallback response for shorter time
+          aiResponseCache.set(cacheKey, {
+            data: fallbackOutfit,
+            timestamp: Date.now()
+          });
+          
+          clearTimeout(timeoutId);
+          return NextResponse.json({
+            success: true,
+            outfits: fallbackOutfit,
+            message: 'AI API temporarily unavailable or timeout, showing basic recommendation',
+            cached: false
+          });
+        }
+        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
 
     const text = response.text;
 
@@ -104,19 +183,38 @@ export async function POST(request: NextRequest) {
     // Validate and format the recommendations
     const formattedOutfits = formatOutfitRecommendations(outfitRecommendations, wardrobeData);
 
+    // Cache the successful response
+    aiResponseCache.set(cacheKey, {
+      data: formattedOutfits,
+      timestamp: Date.now()
+    });
+
     return NextResponse.json({
       success: true,
       outfits: formattedOutfits,
       occasion: occasion || 'casual',
-      wardrobeItemCount: wardrobeData.length
+      wardrobeItemCount: wardrobeData.length,
+      cached: false
     });
 
   } catch (error) {
+    clearTimeout(timeoutId);
     console.error('AI styling error:', error);
+    
+    // Handle timeout specifically
+    if (error instanceof Error && error.message.includes('timeout')) {
+      return NextResponse.json({ 
+        error: 'AI styling request timed out',
+        details: 'The AI service took too long to respond. Please try again.'
+      }, { status: 408 });
+    }
+    
     return NextResponse.json({ 
       error: 'Failed to generate outfit recommendations',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -245,39 +343,123 @@ function formatOutfitRecommendations(recommendations: any, wardrobeData: any[]) 
 }
 
 function createFallbackOutfit(wardrobeData: any[]) {
-  // Group items by category
+  // Group items by category with better matching
   const tops = wardrobeData.filter(item => 
-    ['TOPS', 'top', 'shirt', 'blouse'].includes(item.category.toLowerCase())
+    ['TOPS', 'top', 'shirt', 'blouse', 't-shirt'].includes(item.category.toLowerCase())
   );
   const bottoms = wardrobeData.filter(item => 
-    ['PANTS', 'bottom', 'skirt', 'trousers'].includes(item.category.toLowerCase())
+    ['PANTS', 'bottom', 'skirt', 'trousers', 'jeans'].includes(item.category.toLowerCase())
+  );
+  const dresses = wardrobeData.filter(item => 
+    ['DRESS', 'dress'].includes(item.category.toLowerCase())
   );
   const shoes = wardrobeData.filter(item => 
-    ['SHOES', 'shoes', 'sneakers', 'sandals'].includes(item.category.toLowerCase())
+    ['SHOES', 'shoes', 'sneakers', 'sandals', 'boots'].includes(item.category.toLowerCase())
+  );
+  const bags = wardrobeData.filter(item => 
+    ['BAGS', 'bag', 'handbag'].includes(item.category.toLowerCase())
+  );
+  const accessories = wardrobeData.filter(item => 
+    ['JEWELRY', 'jewelry', 'HATS', 'hat', 'NAILS', 'nails'].includes(item.category.toLowerCase())
   );
 
-  const fallbackOutfit = {
-    id: 'fallback_outfit',
-    name: 'Outfit Kasual',
-    description: 'Rekomendasi outfit kasual yang nyaman',
-    items: [],
-    reasoning: 'Dipilih sebagai outfit dasar yang cocok untuk sehari-hari',
-    itemDetails: []
-  };
+  // Create 3 different outfit variations
+  const outfits = [];
 
-  // Add one item from each category if available
-  if (tops.length > 0) {
-    fallbackOutfit.items.push(tops[0].id);
-    fallbackOutfit.itemDetails.push(tops[0]);
-  }
-  if (bottoms.length > 0) {
-    fallbackOutfit.items.push(bottoms[0].id);
-    fallbackOutfit.itemDetails.push(bottoms[0]);
-  }
-  if (shoes.length > 0) {
-    fallbackOutfit.items.push(shoes[0].id);
-    fallbackOutfit.itemDetails.push(shoes[0]);
+  // Outfit 1: Casual with top + bottom
+  if (tops.length > 0 && bottoms.length > 0) {
+    const top = tops[Math.floor(Math.random() * tops.length)];
+    const bottom = bottoms[Math.floor(Math.random() * bottoms.length)];
+    const shoe = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
+    const bag = bags.length > 0 ? bags[Math.floor(Math.random() * bags.length)] : null;
+    
+    const items = [top.id, bottom.id];
+    const itemDetails = [top, bottom];
+    
+    if (shoe) {
+      items.push(shoe.id);
+      itemDetails.push(shoe);
+    }
+    if (bag) {
+      items.push(bag.id);
+      itemDetails.push(bag);
+    }
+
+    outfits.push({
+      id: 'fallback_casual',
+      name: 'Outfit Kasual',
+      description: 'Kombinasi santai untuk sehari-hari',
+      items,
+      reasoning: 'Dipilih sebagai outfit dasar yang nyaman dan praktis',
+      itemDetails
+    });
   }
 
-  return [fallbackOutfit];
+  // Outfit 2: Dress based
+  if (dresses.length > 0) {
+    const dress = dresses[Math.floor(Math.random() * dresses.length)];
+    const shoe = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
+    const bag = bags.length > 0 ? bags[Math.floor(Math.random() * bags.length)] : null;
+    
+    const items = [dress.id];
+    const itemDetails = [dress];
+    
+    if (shoe) {
+      items.push(shoe.id);
+      itemDetails.push(shoe);
+    }
+    if (bag) {
+      items.push(bag.id);
+      itemDetails.push(bag);
+    }
+
+    outfits.push({
+      id: 'fallback_dress',
+      name: 'Outfit Dress',
+      description: 'Tampil elegan dengan dress',
+      items,
+      reasoning: 'Dress memberikan tampilan yang mudah dan elegan',
+      itemDetails
+    });
+  }
+
+  // Outfit 3: Top + bottom with accessories
+  if (tops.length > 0 && bottoms.length > 0 && accessories.length > 0) {
+    const top = tops[Math.floor(Math.random() * tops.length)];
+    const bottom = bottoms[Math.floor(Math.random() * bottoms.length)];
+    const accessory = accessories[Math.floor(Math.random() * accessories.length)];
+    const shoe = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
+    
+    const items = [top.id, bottom.id, accessory.id];
+    const itemDetails = [top, bottom, accessory];
+    
+    if (shoe) {
+      items.push(shoe.id);
+      itemDetails.push(shoe);
+    }
+
+    outfits.push({
+      id: 'fallback_accessorized',
+      name: 'Outfit dengan Aksesori',
+      description: 'Tampilan lebih menarik dengan sentuhan aksesori',
+      items,
+      reasoning: 'Aksesori menambahkan kesan personal pada outfit',
+      itemDetails
+    });
+  }
+
+  // If no outfits created, create a basic one with whatever is available
+  if (outfits.length === 0 && wardrobeData.length > 0) {
+    const items = wardrobeData.slice(0, Math.min(3, wardrobeData.length));
+    outfits.push({
+      id: 'fallback_basic',
+      name: 'Outfit Sederhana',
+      description: 'Kombinasi dasar dari item yang tersedia',
+      items: items.map(item => item.id),
+      reasoning: 'Dipilih berdasarkan ketersediaan item di wardrobe',
+      itemDetails: items
+    });
+  }
+
+  return outfits.slice(0, 3); // Return max 3 outfits
 }
