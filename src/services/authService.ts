@@ -10,6 +10,8 @@ export interface User {
   name?: string;
   username?: string;
   email: string;
+  profile_picture?: string;
+  header_image?: string;
   created_at: string;
 }
 
@@ -48,6 +50,8 @@ export const authService = {
         email: data.user.email!,
         name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || '',
         username: data.user.user_metadata?.username || '',
+        profile_picture: data.user.user_metadata?.profile_picture || '',
+        header_image: data.user.user_metadata?.header_image || '',
         created_at: data.user.created_at
       }
 
@@ -99,6 +103,8 @@ export const authService = {
         email: data.user!.email!,
         name: credentials.name,
         username: credentials.username,
+        profile_picture: '',
+        header_image: '',
         created_at: data.user!.created_at
       }
 
@@ -125,6 +131,8 @@ export const authService = {
         email: user.email!,
         name: user.user_metadata?.name || user.email?.split('@')[0] || '',
         username: user.user_metadata?.username || '',
+        profile_picture: user.user_metadata?.profile_picture || '',
+        header_image: user.user_metadata?.header_image || '',
         created_at: user.created_at
       }
     } catch (error) {
@@ -181,6 +189,8 @@ export const authService = {
         email: user.email!,
         name: user.user_metadata?.name || user.email?.split('@')[0] || '',
         username: user.user_metadata?.username || '',
+        profile_picture: user.user_metadata?.profile_picture || '',
+        header_image: user.user_metadata?.header_image || '',
         created_at: user.created_at
       }
     } catch (error) {

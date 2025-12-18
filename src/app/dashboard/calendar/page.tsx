@@ -417,7 +417,7 @@ export default function CalendarPage() {
           name: 'WhatsApp', 
           action: () => {
             const text = 'Check out my outfit!';
-            const url = `https://wa.me/?text=${encodeURIComponent(text)} ${encodeURIComponent(canvasImage)}`;
+            const url = `https://wa.me/?text=${encodeURIComponent(text + ' ' + canvasImage)}`;
             window.open(url, '_blank');
           }
         },

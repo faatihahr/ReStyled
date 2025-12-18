@@ -12,6 +12,8 @@ import AIStylingModal from '@/components/AIStylingModal';
 import OutfitDisplayModal from '@/components/OutfitDisplayModal';
 import OutfitCanvasModal from '@/components/OutfitCanvasModal';
 import ToastNotification from '@/components/ToastNotification';
+import ProfileEditModal from '@/components/ProfileEditModal';
+import OutfitsModal from '@/components/OutfitsModal';
 
 interface WardrobeItem {
   id: string;
@@ -69,6 +71,10 @@ export default function DashboardPage() {
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [selectedAIOutfit, setSelectedAIOutfit] = useState<any>(null);
+  
+  // Profile and Outfits modal states
+  const [showProfileEditModal, setShowProfileEditModal] = useState(false);
+  const [showOutfitsModal, setShowOutfitsModal] = useState(false);
   
   const categories = [
     { id: 'ALL', name: 'ALL', icon: '/images/icons/hanger.png' },
@@ -384,6 +390,59 @@ export default function DashboardPage() {
     }
   };
 
+  // Handle profile editing
+  const handleProfileEdit = async (updatedProfile: any) => {
+    try {
+      // Save to backend API
+      const token = await authService.getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updatedProfile),
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error('Response status:', response.status);
+        console.error('Response text:', responseText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          errorData = { error: responseText };
+        }
+        
+        console.error('Profile update API error:', errorData);
+        throw new Error(errorData.error || 'Failed to update profile');
+      }
+
+      // Refetch user data to get the latest profile information
+      const userData = await authService.getCurrentUser();
+      if (userData) {
+        setUser(userData);
+      }
+      
+      console.log('Profile updated:', updatedProfile);
+      setToast({ message: 'Profile updated successfully!', type: 'success' });
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      setToast({ message: 'Failed to update profile. Please try again.', type: 'error' });
+    }
+  };
+
+  // Handle showing outfits modal
+  const handleShowOutfits = () => {
+    setShowOutfitsModal(true);
+  };
+
   
   const filteredItems = selectedCategory === 'ALL' 
     ? wardrobeItems 
@@ -421,7 +480,7 @@ export default function DashboardPage() {
         {/* Left Navigation Bar - Desktop Only */}
         <div className="hidden lg:flex lg:w-20 bg-white shadow-lg lg:flex-col lg:items-center lg:py-8 lg:space-y-8 lg:h-screen lg:fixed lg:left-0 lg:top-0">
           {/* AI Styling Button */}
-          <div className="relative">
+          <div className="relative group">
             <button 
               onClick={() => setShowAIStylingModal(true)}
               className={`p-4 rounded-full transition relative cursor-pointer ${
@@ -436,13 +495,17 @@ export default function DashboardPage() {
                 className="w-8 h-8"
               />
             </button>
+            {/* Tooltip */}
+            <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              AI Styling
+            </div>
             {activeNav === 'ai' && (
               <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full"></div>
             )}
           </div>
           
           {/* Manual Styling Hanger */}
-          <div className="relative">
+          <div className="relative group">
             <button 
               onClick={() => window.location.href = '/dashboard/manual'}
               className={`p-3 rounded-lg transition relative cursor-pointer ${
@@ -456,13 +519,17 @@ export default function DashboardPage() {
                 style={{ filter: activeNav === 'manual' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
               />
             </button>
+            {/* Tooltip */}
+            <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              Manual Styling
+            </div>
             {activeNav === 'manual' && (
               <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full"></div>
             )}
           </div>
           
           {/* Wardrobe Icon */}
-          <div className="relative">
+          <div className="relative group">
             <button 
               onClick={() => setActiveNav('wardrobe')}
               className={`p-3 rounded-lg transition relative cursor-pointer ${
@@ -476,13 +543,17 @@ export default function DashboardPage() {
                 style={{ filter: activeNav === 'wardrobe' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
               />
             </button>
+            {/* Tooltip */}
+            <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              Wardrobe
+            </div>
             {activeNav === 'wardrobe' && (
               <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full"></div>
             )}
           </div>
           
           {/* Calendar Icon */}
-          <div className="relative">
+          <div className="relative group">
             <button 
               onClick={() => {
                 console.log('Dashboard calendar clicked');
@@ -499,13 +570,17 @@ export default function DashboardPage() {
                 style={{ filter: activeNav === 'calendar' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
               />
             </button>
+            {/* Tooltip */}
+            <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              Calendar
+            </div>
             {activeNav === 'calendar' && (
               <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full"></div>
             )}
           </div>
           
           {/* Logout Icon */}
-          <div className="relative mt-auto">
+          <div className="relative mt-auto group">
             <button 
               onClick={handleLogout}
               className="p-3 rounded-lg transition relative cursor-pointer hover:bg-red-100 group"
@@ -517,6 +592,10 @@ export default function DashboardPage() {
                 style={{ filter: 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' }}
               />
             </button>
+            {/* Tooltip */}
+            <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-800 text-white text-sm px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              Logout
+            </div>
           </div>
         </div>
 
@@ -602,36 +681,73 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Sidebar - Profile and Add Button - Desktop Only */}
-          <div className="hidden xl:block xl:w-80 xl:p-8 xl:flex xl:flex-col xl:items-center">
+          <div className="hidden xl:block xl:w-96 xl:p-8 xl:flex xl:flex-col xl:items-center">
             {/* User Profile Card */}
-            <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-              {/* Outfit Collage */}
-              <div className="grid grid-cols-3 gap-1 mb-4">
-                <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                <div className="w-16 h-16 bg-gray-200 rounded"></div>
-                <div className="w-16 h-16 bg-gray-200 rounded"></div>
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8 w-full max-w-sm">
+              {/* Header Image */}
+              <div className="h-32 bg-gradient-to-r from-green-200 to-blue-200 relative">
+                {(user?.header_image || user?.user_metadata?.header_image) ? (
+                  <img 
+                    src={user?.header_image || user?.user_metadata?.header_image} 
+                    alt="Header" 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-gray-500 text-sm">Header Image</div>
+                  </div>
+                )}
               </div>
               
               {/* Profile Info */}
-              <div className="flex flex-col items-center">
-                {user?.profile_picture ? (
-                  <img 
-                    src={user.profile_picture} 
-                    alt="Profile" 
-                    className="w-20 h-20 rounded-full mb-3 object-cover"
-                  />
-                ) : (
-                  <div className="w-20 h-20 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mb-3 flex items-center justify-center">
-                    <span className="text-white text-2xl font-bold">
-                      {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                    </span>
+              <div className="relative p-8">
+                {/* Avatar with Edit Button */}
+                <div className="absolute -top-12 left-1/2 transform -translate-x-1/2">
+                  <div className="relative">
+                    {user?.profile_picture ? (
+                      <img 
+                        src={user.profile_picture} 
+                        alt="Profile" 
+                        className="w-24 h-24 rounded-full object-cover border-4 border-white"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center border-4 border-white">
+                        <span className="text-white text-3xl font-bold">
+                          {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+                        </span>
+                      </div>
+                    )}
+                    {/* Edit Profile Button */}
+                    <button 
+                      onClick={() => setShowProfileEditModal(true)}
+                      className="absolute bottom-0 right-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center hover:bg-green-600 transition shadow-lg cursor-pointer"
+                    >
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
                   </div>
-                )}
-                <h3 className="font-semibold text-lg">{user?.name || 'User'}</h3>
-                <p className="text-gray-500 text-sm">@{user?.username || user?.email?.split('@')[0] || 'user'}</p>
+                </div>
+                
+                {/* User Info */}
+                <div className="flex flex-col items-center mt-14">
+                  <h3 className="font-semibold text-xl">{user?.name || 'Araaa'}</h3>
+                  <p className="text-gray-500 text-sm">@{user?.username || user?.email?.split('@')[0] || 'wildlilly_'}</p>
+                  
+                  {/* Menu Items */}
+                  <div className="flex flex-col items-center mt-4 space-y-2 w-full">
+                    {/* Outfits Menu Item */}
+                    <button 
+                      onClick={handleShowOutfits}
+                      className="flex items-center space-x-2 p-3 rounded-lg hover:bg-gray-100 transition w-full justify-center cursor-pointer"
+                    >
+                      <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                      </svg>
+                      <span className="text-gray-700 font-medium">Outfits</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -818,6 +934,20 @@ export default function DashboardPage() {
           onSave={handleSaveOutfitFromCanvas}
         />
       )}
+
+      {/* Profile Edit Modal */}
+      <ProfileEditModal
+        isOpen={showProfileEditModal}
+        onClose={() => setShowProfileEditModal(false)}
+        user={user}
+        onSave={handleProfileEdit}
+      />
+
+      {/* Outfits Modal */}
+      <OutfitsModal
+        isOpen={showOutfitsModal}
+        onClose={() => setShowOutfitsModal(false)}
+      />
 
       {/* Processing Overlay */}
       {isProcessing && (

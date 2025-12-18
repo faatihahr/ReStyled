@@ -48,6 +48,7 @@ export interface Outfit {
   weather_suitable: string[]
   style_tags: string[]
   clothing_item_ids: string[]
+  canvas_image?: string
   ai_generated: boolean
   confidence_score: number
   favorite_count: number

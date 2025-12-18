@@ -183,8 +183,15 @@ export default function OutfitDisplayModal({
             <div className="flex gap-3 pt-4 border-t border-gray-200">
               <button
                 onClick={() => {
+                  console.log('Simpan Outfit button clicked');
+                  console.log('Current outfit:', currentOutfit);
+                  console.log('onSaveToCanvas function:', onSaveToCanvas);
+                  
                   if (onSaveToCanvas && currentOutfit) {
+                    console.log('Calling onSaveToCanvas with:', currentOutfit);
                     onSaveToCanvas(currentOutfit);
+                  } else {
+                    console.log('Cannot save - missing onSaveToCanvas or currentOutfit');
                   }
                 }}
                 className="flex-1 bg-gradient-to-r from-[#aace67] to-pink-400 text-white py-2 px-4 rounded-lg hover:shadow-lg transition"
