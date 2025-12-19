@@ -91,7 +91,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchUser = async () => {
-      const token = authService.getToken();
+      const token = await authService.getToken();
       if (!token) {
         window.location.href = '/login';
         return;
@@ -475,7 +475,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#aace67] via-pink-100 to-[#ffa4a4]" style={{ fontFamily: 'Merriweather, serif' }}>
+    <div className="min-h-screen bg-gradient-to-br from-[#aace67] via-pink-100 to-[#ffa4a4] overflow-x-hidden" style={{ fontFamily: 'Merriweather, serif' }}>
       <div className="flex flex-col lg:flex-row">
         {/* Left Navigation Bar - Desktop Only */}
         <div className="hidden lg:flex lg:w-20 bg-white shadow-lg lg:flex-col lg:items-center lg:py-8 lg:space-y-8 lg:h-screen lg:fixed lg:left-0 lg:top-0">
@@ -600,8 +600,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex lg:ml-20">
-          <div className="flex-1 p-4 lg:p-8">
+        <div className="flex-1 flex lg:ml-20 min-w-0">
+          <div className="flex-1 p-4 lg:p-8 min-w-0">
             {/* Category Filters */}
             <div className="mb-6 lg:mb-8">
               <div className="flex items-center gap-2 lg:gap-4">
@@ -662,16 +662,16 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Wardrobe Items Grid - Responsive without Scroll */}
-            <div className="pb-20 lg:pb-0">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+            {/* Wardrobe Items Grid - Responsive: 2 cols on mobile, vertical scroll */}
+            <div className="pb-20 lg:pb-0 w-full">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
                 {filteredItems.map((item) => (
-                  <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 hover:scale-105">
-                    <div className="aspect-square sm:aspect-[3/4] lg:aspect-square bg-gray-200 flex items-center justify-center p-2">
+                  <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 hover:scale-105 max-w-full min-w-0">
+                    <div className="bg-gray-200 flex items-center justify-center p-1 h-28 sm:h-36 md:h-40 lg:h-48">
                       <img 
                         src={item.imageUrl} 
                         alt={item.name} 
-                        className="w-full h-full object-contain"
+                        className="max-w-full max-h-full object-contain"
                       />
                     </div>
                   </div>

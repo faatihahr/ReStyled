@@ -329,46 +329,49 @@ export default function OutfitCanvasModal({
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-[#aace67]/30 via-pink-200/30 to-[#ffa4a4]/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-[95vw] h-[85vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-2xl font-bold text-gray-800">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 sm:p-6 border-b gap-3">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
             {isEditingMode ? 'Edit Outfit' : 'Outfit Canvas'}
           </h2>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={() => setShowAccessories(!showAccessories)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-xs sm:text-sm"
             >
-              <Plus className="w-4 h-4" />
-              Accessories
+              <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Accessories</span>
+              <span className="sm:hidden">Acc</span>
             </button>
             <button
               onClick={() => setShowOuterwear(!showOuterwear)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-xs sm:text-sm"
             >
-              <Plus className="w-4 h-4" />
-              Outerwear
+              <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Outerwear</span>
+              <span className="sm:hidden">Out</span>
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-xs sm:text-sm"
             >
-              <Save className="w-4 h-4" />
-              Save to Calendar
+              <Save className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Save to Calendar</span>
+              <span className="sm:hidden">Save</span>
             </button>
             <button
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
-        <div className="flex h-[calc(90vh-88px)]">
+        <div className="flex h-[calc(85vh-88px)]">
           {/* Main Canvas Area */}
-          <div className="flex-1 p-6">
+          <div className="flex-1 p-3 sm:p-6 min-w-0">
             <div
               ref={canvasRef}
               className="relative w-full h-full bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl overflow-hidden"

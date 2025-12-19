@@ -268,11 +268,15 @@ class ImageProcessingService {
       }
 
       const result = await response.json();
+      // Ensure ACCESSORIES is present in categories for UI
+      if (Array.isArray(result.categories) && !result.categories.includes('ACCESSORIES')) {
+        result.categories.push('ACCESSORIES');
+      }
       return result.categories;
     } catch (error) {
       console.error('Error fetching categories:', error);
-      // Fallback categories
-      return ['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS'];
+      // Fallback categories (include ACCESSORIES)
+      return ['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS', 'ACCESSORIES'];
     }
   }
 }

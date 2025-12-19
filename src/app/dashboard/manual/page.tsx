@@ -78,10 +78,10 @@ export default function ManualStylingPage() {
 
   useEffect(() => {
     const fetchUser = async () => {
-      const token = authService.getToken();
+      const token = await authService.getToken();
       if (!token) {
         window.location.href = '/login';
-        return;
+        return null;
       }
 
       try {
@@ -121,20 +121,24 @@ export default function ManualStylingPage() {
           console.error('Failed to fetch wardrobe items:', error);
           setWardrobeItems([]);
         }
+        return userData;
       } catch (error) {
         console.error('Failed to fetch user:', error);
         authService.removeToken();
         window.location.href = '/login';
+        return null;
       } finally {
         setLoading(false);
       }
     };
 
-    fetchUser();
-    
-    // Check if we're editing an existing outfit
-    const editingOutfitData = localStorage.getItem('editingOutfit');
-    if (editingOutfitData) {
+    (async () => {
+      const userData = await fetchUser();
+
+      // Check if we're editing an existing outfit (user-scoped key)
+      const editingKey = userData ? `editingOutfit_${userData.id}` : 'editingOutfit';
+      const editingOutfitData = localStorage.getItem(editingKey);
+      if (editingOutfitData) {
       try {
         const outfit = JSON.parse(editingOutfitData);
         setEditingOutfit(outfit);
@@ -170,12 +174,13 @@ export default function ManualStylingPage() {
         }
         
         // Clear the editing outfit from localStorage
-        localStorage.removeItem('editingOutfit');
+        localStorage.removeItem(editingKey);
       } catch (error) {
         console.error('Error parsing editing outfit:', error);
-        localStorage.removeItem('editingOutfit');
+        localStorage.removeItem(editingKey);
       }
     }
+    })();
   }, []);
 
   const handleLogout = () => {
@@ -382,6 +387,7 @@ export default function ManualStylingPage() {
     console.log('Saving outfit with canvas image:', outfitData.canvasImage ? 'Yes' : 'No');
     
     try {
+      const savedKey = user?.id ? `savedOutfits_${user.id}` : 'savedOutfits';
       if (isEditingMode && editingOutfit) {
         // Update existing outfit
         const token = await authService.getToken();
@@ -429,12 +435,12 @@ export default function ManualStylingPage() {
                 canvasImage: outfitData.canvasImage
               };
               
-              const existingOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
+              const existingOutfits = JSON.parse(localStorage.getItem(savedKey) || '[]');
               const outfitIndex = existingOutfits.findIndex((outfit: any) => outfit.id === editingOutfit.id);
               
               if (outfitIndex >= 0) {
                 existingOutfits[outfitIndex] = updatedOutfit;
-                localStorage.setItem('savedOutfits', JSON.stringify(existingOutfits));
+                localStorage.setItem(savedKey, JSON.stringify(existingOutfits));
               }
             } else {
               console.log('Database outfit updated - no localStorage save needed');
@@ -458,12 +464,12 @@ export default function ManualStylingPage() {
           name: outfitData.name || editingOutfit.name
         };
         
-        const existingOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
+        const existingOutfits = JSON.parse(localStorage.getItem(savedKey) || '[]');
         const outfitIndex = existingOutfits.findIndex((outfit: any) => outfit.id === editingOutfit.id);
         
         if (outfitIndex >= 0) {
           existingOutfits[outfitIndex] = updatedOutfit;
-          localStorage.setItem('savedOutfits', JSON.stringify(existingOutfits));
+          localStorage.setItem(savedKey, JSON.stringify(existingOutfits));
         }
         
         setShowCanvas(false);
@@ -501,7 +507,7 @@ export default function ManualStylingPage() {
         // Save to localStorage only (testing approach)
         console.log('Saving outfit to localStorage for testing adverts...');
         
- const savedOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
+ const savedOutfits = JSON.parse(localStorage.getItem(savedKey) || '[]');
         const newOutfit = {
           id: `outfit_${Date.now()}`, // Generate unique ID
           name: outfitData.name,
@@ -516,7 +522,7 @@ export default function ManualStylingPage() {
         };
         
         savedOutfits.push(newOutfit);
-        localStorage.setItem('savedOutfits', JSON.stringify(savedOutfits));
+        localStorage.setItem(savedKey, JSON.stringify(savedOutfits));
         console.log('Outfit saved to localStorage for testing:', newOutfit);
         
         setShowCanvas(false);
@@ -527,7 +533,7 @@ export default function ManualStylingPage() {
       // Save to localStorage only (testing approach)
       console.log('Saving outfit to localStorage for testing...');
       
-      const savedOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
+      const savedOutfits = JSON.parse(localStorage.getItem(savedKey) || '[]');
       const newOutfit = {
         id: `outfit_${Date.now()}`,
         name: outfitData.name,
@@ -542,7 +548,7 @@ export default function ManualStylingPage() {
       };
       
       savedOutfits.push(newOutfit);
-      localStorage.setItem('savedOutfits', JSON.stringify(savedOutfits));
+      localStorage.setItem(savedKey, JSON.stringify(savedOutfits));
       console.log('Outfit saved to localStorage:', newOutfit);
       
       setShowCanvas(false);
@@ -553,7 +559,7 @@ export default function ManualStylingPage() {
       
       // Fallback to localStorage if database save fails
       try {
-        const existingOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
+        const existingOutfits = JSON.parse(localStorage.getItem(savedKey) || '[]');
         
         if (isEditingMode && editingOutfit) {
           // Update existing outfit
@@ -570,7 +576,7 @@ export default function ManualStylingPage() {
           existingOutfits.push(outfitData);
         }
         
-        localStorage.setItem('savedOutfits', JSON.stringify(existingOutfits));
+        localStorage.setItem(savedKey, JSON.stringify(existingOutfits));
       } catch (localStorageError) {
         console.error('Error saving outfit to localStorage:', localStorageError);
       }
@@ -928,6 +934,103 @@ export default function ManualStylingPage() {
           )}
         </div>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t border-gray-200 z-50">
+        <div className="flex justify-around items-center py-2">
+          {/* Calendar Icon */}
+          <button 
+            onClick={() => handleNavigation('calendar')}
+            className={`p-3 rounded-lg transition relative cursor-pointer ${
+              activeNav === 'calendar' ? 'bg-green-100' : 'hover:bg-gray-100'
+            }`}
+          >
+            <img 
+              src="/images/icons/calendar.png" 
+              alt="Calendar" 
+              className={`w-6 h-6 ${activeNav === 'calendar' ? 'filter brightness-0 saturate-100' : ''}`}
+              style={{ filter: activeNav === 'calendar' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
+            />
+          </button>
+          
+          {/* AI Styling Button */}
+          <button 
+            onClick={() => handleNavigation('ai')}
+            className={`p-3 rounded-full transition relative cursor-pointer ${
+              activeNav === 'ai' 
+                ? 'bg-green-500 shadow-lg' 
+                : 'bg-gradient-to-r from-[#aace67] to-pink-400 hover:shadow-lg'
+            }`}
+          >
+            <img 
+              src="/images/icons/ai.png" 
+              alt="AI Styling" 
+              className="w-6 h-6"
+            />
+          </button>
+            
+            {/* Manual Styling Hanger */}
+            <button 
+              onClick={() => handleNavigation('manual')}
+              className={`p-3 rounded-lg transition relative cursor-pointer ${
+                activeNav === 'manual' ? 'bg-green-100' : 'hover:bg-gray-100'
+              }`}
+            >
+              <img 
+                src="/images/icons/hanger.png" 
+                alt="Manual Styling" 
+                className={`w-6 h-6 ${activeNav === 'manual' ? 'filter brightness-0 saturate-100' : ''}`}
+                style={{ filter: activeNav === 'manual' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
+              />
+            </button>
+            
+            {/* Wardrobe Icon */}
+            <button 
+              onClick={() => handleNavigation('wardrobe')}
+              className={`p-3 rounded-lg transition relative cursor-pointer ${
+                activeNav === 'wardrobe' ? 'bg-green-100' : 'hover:bg-gray-100'
+              }`}
+            >
+              <img 
+                src="/images/icons/closet.png" 
+                alt="Wardrobe" 
+                className={`w-6 h-6 ${activeNav === 'wardrobe' ? 'filter brightness-0 saturate-100' : ''}`}
+                style={{ filter: activeNav === 'wardrobe' ? 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' : '' }}
+              />
+            </button>
+          </div>
+        </div>
+
+      {/* Mobile Profile Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-200 z-40">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-[#aace67] to-pink-400 rounded-full flex items-center justify-center">
+              <span className="text-white font-bold text-sm">
+                {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+              </span>
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">{user?.name || 'User'}</h3>
+              <p className="text-gray-500 text-xs">@{user?.username || user?.email?.split('@')[0] || 'user'}</p>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="p-2 rounded-lg hover:bg-gray-100 transition"
+          >
+            <img 
+              src="/images/icons/logout.png" 
+              alt="Logout" 
+              className="w-5 h-5"
+              style={{ filter: 'invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)' }}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Add padding for mobile header and bottom nav */}
+      <div className="lg:hidden pt-16 pb-20"></div>
 
       {showQuestionnaire && (
         <QuestionnaireModal

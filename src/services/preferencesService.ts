@@ -12,7 +12,8 @@ export interface UserPreferences {
   updated_at?: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+// Use NEXT_PUBLIC_API_URL when provided; otherwise use same-origin (relative) API routes.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 class PreferencesService {
   private async makeRequest(endpoint: string, options: RequestInit = {}) {

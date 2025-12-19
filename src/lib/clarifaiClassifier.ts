@@ -55,9 +55,11 @@ const CATEGORY_MAPPING: { [key: string]: { category: string; subcategory: string
   'jewelry': { category: 'jewelry', subcategory: 'jewelry' },
   
   // Accessories
-  'bag': { category: 'accessories', subcategory: 'bag' },
-  'handbag': { category: 'accessories', subcategory: 'handbag' },
-  'backpack': { category: 'accessories', subcategory: 'backpack' },
+  'bag': { category: 'bags', subcategory: 'bag' },
+  'bags': { category: 'bags', subcategory: 'bag' },
+  'handbag': { category: 'bags', subcategory: 'handbag' },
+  'backpack': { category: 'bags', subcategory: 'backpack' },
+  'tote': { category: 'bags', subcategory: 'tote' },
   'purse': { category: 'accessories', subcategory: 'purse' },
   'wallet': { category: 'accessories', subcategory: 'wallet' },
   'hat': { category: 'accessories', subcategory: 'hat' },
@@ -65,7 +67,16 @@ const CATEGORY_MAPPING: { [key: string]: { category: string; subcategory: string
   'scarf': { category: 'accessories', subcategory: 'scarf' },
   'belt': { category: 'accessories', subcategory: 'belt' },
   'watch': { category: 'accessories', subcategory: 'watch' },
-  
+  'glasses': { category: 'accessories', subcategory: 'eyewear' },
+  'sunglasses': { category: 'accessories', subcategory: 'eyewear' },
+  'eyewear': { category: 'accessories', subcategory: 'eyewear' },
+  'spectacles': { category: 'accessories', subcategory: 'eyewear' },
+  // Nails / manicure
+  'nail': { category: 'nails', subcategory: 'nails' },
+  'nails': { category: 'nails', subcategory: 'nails' },
+  'nail polish': { category: 'nails', subcategory: 'nails' },
+  'manicure': { category: 'nails', subcategory: 'nails' },
+  'press on nails': { category: 'nails', subcategory: 'nails' },
   // Default fallback
   'clothing': { category: 'tops', subcategory: 'top' },
   'fashion': { category: 'tops', subcategory: 'top' }
@@ -217,7 +228,17 @@ export class ClarifaiClassifier {
         .sort((a: any, b: any) => b.confidence - a.confidence)
         .slice(0, 10);
 
-      const topPrediction = allPredictions[0];
+      let topPrediction = allPredictions[0];
+
+      // Prefer accessory categories (e.g., glasses) if present with reasonable confidence.
+      // Rule: if an accessory prediction exists and its confidence is >= max(0.5, 0.75 * topConfidence), choose it.
+      const accessoryPrediction = allPredictions.find((p: any) => p.category === 'accessories');
+      if (accessoryPrediction) {
+        const accessoryThreshold = Math.max(0.5, 0.75 * (topPrediction.confidence || 0));
+        if ((accessoryPrediction.confidence || 0) >= accessoryThreshold) {
+          topPrediction = accessoryPrediction;
+        }
+      }
 
       return {
         predicted_label: topPrediction.label,
@@ -294,7 +315,16 @@ export class ClarifaiClassifier {
         throw new Error('No valid predictions found');
       }
 
-      const topPrediction = allPredictions[0];
+      let topPrediction = allPredictions[0];
+
+      // Same accessory-preference heuristic for generic responses
+      const accessoryPrediction = allPredictions.find((p: any) => p.category === 'accessories');
+      if (accessoryPrediction) {
+        const accessoryThreshold = Math.max(0.5, 0.75 * (topPrediction.confidence || 0));
+        if ((accessoryPrediction.confidence || 0) >= accessoryThreshold) {
+          topPrediction = accessoryPrediction;
+        }
+      }
 
       return {
         predicted_label: topPrediction.label,

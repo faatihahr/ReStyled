@@ -36,15 +36,32 @@ export default function ClothingItemModal({
     // Load categories and styles
     const loadOptions = async () => {
       try {
-        const cats = await imageProcessingService.getCategories();
+        let cats = await imageProcessingService.getCategories();
         const styles = imageProcessingService.getStyleOptions();
+
+        // Ensure ACCESSORIES button is always available in UI
+        if (!cats.includes('ACCESSORIES')) {
+          cats = [...cats, 'ACCESSORIES'];
+        }
+
         setCategories(cats);
         setStyleOptions(styles);
+        // After categories load, try to auto-select based on detectedCategory
+        if (processedImage && processedImage.detectedCategory) {
+          const mapped = mapDetectedToUiCategory(processedImage.detectedCategory, cats);
+          if (mapped) setSelectedCategory(mapped);
+        }
       } catch (error) {
         console.error('Failed to load options:', error);
         // Fallback options
         setCategories(['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS', 'OUTERWEAR']);
         setStyleOptions(['Casual', 'Classic', 'Chic', 'Streetwear', 'Preppy', 'Vintage Retro', 'Y2K', 'Minimalist', 'Formal', 'Bohemian']);
+        // Fallback mapping when categories fallback used
+        if (processedImage && processedImage.detectedCategory) {
+          const fallbackCats = ['TOPS', 'PANTS', 'DRESS', 'SKIRTS', 'SHOES', 'BAGS', 'JEWELRY', 'HATS', 'NAILS', 'OUTERWEAR'];
+          const mapped = mapDetectedToUiCategory(processedImage.detectedCategory, fallbackCats);
+          if (mapped) setSelectedCategory(mapped);
+        }
       }
     };
 
@@ -52,6 +69,35 @@ export default function ClothingItemModal({
       loadOptions();
     }
   }, [isOpen]);
+
+  // Map classifier category/subcategory to UI category labels
+  const mapDetectedToUiCategory = (detected: string, uiCategories: string[]) => {
+    if (!detected) return null;
+    const d = detected.toLowerCase();
+
+    // direct matches
+    if (d.includes('bag') || d.includes('purse') || d.includes('handbag') || d.includes('backpack') || d.includes('tote')) {
+      return uiCategories.find(c => c.toUpperCase() === 'BAGS') || 'BAGS';
+    }
+
+    if (d.includes('nail') || d.includes('manicure') || d.includes('nail polish')) {
+      return uiCategories.find(c => c.toUpperCase() === 'NAILS') || 'NAILS';
+    }
+
+    if (d.includes('glasses') || d.includes('sunglass') || d.includes('eyewear') || d.includes('spectacle') || d.includes('frames')) {
+      return uiCategories.find(c => c.toUpperCase() === 'ACCESSORIES') || uiCategories.find(c => c.toUpperCase() === 'JEWELRY') || null;
+    }
+
+    // Map nails/bags/hat/jewelry explicitly
+    if (d.includes('hat') || d.includes('cap')) return uiCategories.find(c => c.toUpperCase() === 'HATS') || 'HATS';
+    if (d.includes('shoe') || d.includes('sneaker') || d.includes('boot') || d.includes('heel')) return uiCategories.find(c => c.toUpperCase() === 'SHOES') || 'SHOES';
+
+    // default: try to match exact UI category names
+    const exact = uiCategories.find(c => c.toLowerCase() === d.toLowerCase());
+    if (exact) return exact;
+
+    return null;
+  };
 
   const handleStyleToggle = (style: string) => {
     setSelectedStyles(prev => 
@@ -165,7 +211,8 @@ export default function ClothingItemModal({
                     <button
                       key={category}
                       onClick={() => setSelectedCategory(category)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                      title={category}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition inline-block overflow-hidden whitespace-nowrap truncate max-w-[110px] ${
                         selectedCategory === category
                           ? 'bg-green-500 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -187,7 +234,8 @@ export default function ClothingItemModal({
                     <button
                       key={style}
                       onClick={() => handleStyleToggle(style)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                      title={style}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition inline-block overflow-hidden whitespace-nowrap truncate max-w-[140px] ${
                         selectedStyles.includes(style)
                           ? 'bg-green-500 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'

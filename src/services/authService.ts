@@ -3,7 +3,19 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'restyled-app'
+    }
+  }
+})
 
 export interface User {
   id: string;
@@ -149,9 +161,44 @@ export const authService = {
   },
 
   async getToken(): Promise<string | null> {
-    // Get token from Supabase session
-    const { data: { session } } = await supabase.auth.getSession()
-    return session?.access_token || null
+    try {
+      // Get token from Supabase session with retry logic
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            return session.access_token
+          }
+          
+          // If no session, try to refresh
+          if (attempts === 0 && session?.refresh_token) {
+            await supabase.auth.refreshSession()
+            attempts++
+            continue
+          }
+          
+          attempts++
+          if (attempts < maxAttempts) {
+            // Small delay before retry
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        } catch (error) {
+          console.warn(`Token retrieval attempt ${attempts + 1} failed:`, error)
+          attempts++
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        }
+      }
+      
+      return null
+    } catch (error) {
+      console.error('Token retrieval failed:', error)
+      return null
+    }
   },
 
   removeToken(): void {

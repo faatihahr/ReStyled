@@ -23,6 +23,7 @@ export default function CalendarPage() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   
   // AI Styling states
+   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showAIStylingModal, setShowAIStylingModal] = useState(false);
   const [showOutfitDisplayModal, setShowOutfitDisplayModal] = useState(false);
   const [showOutfitCanvasModal, setShowOutfitCanvasModal] = useState(false);
@@ -33,9 +34,10 @@ export default function CalendarPage() {
 
   // Load outfits from both localStorage and database
   const loadOutfits = useCallback(async () => {
+   const currentUser = await authService.getCurrentUser();
     try {
-      // Load from localStorage first
-      const localOutfits = JSON.parse(localStorage.getItem('savedOutfits') || '[]');
+     const localKey = currentUser ? `savedOutfits_${currentUser.id}` : 'savedOutfits';
+     const localOutfits = JSON.parse(localStorage.getItem(localKey) || '[]');
       console.log('Loaded outfits from localStorage:', localOutfits.length);
       
       // Try to load from database
@@ -81,7 +83,8 @@ export default function CalendarPage() {
             console.log('Total outfits after merge:', allOutfits.length);
           } else {
             console.log('Failed to fetch from database, using localStorage only');
-            setSavedOutfits(localOutfits);
+             setSavedOutfits(localOutfits);
+             localStorage.setItem(localKey, JSON.stringify(localOutfits));
           }
         } else {
           console.log('No auth token, using localStorage only');
@@ -89,7 +92,8 @@ export default function CalendarPage() {
         }
       } catch (dbError) {
         console.log('Database fetch failed, using localStorage only:', dbError);
-        setSavedOutfits(localOutfits);
+         setSavedOutfits(localOutfits);
+         localStorage.setItem(localKey, JSON.stringify(localOutfits));
       }
     } catch (error) {
       console.error('Error loading outfits:', error);
@@ -97,6 +101,13 @@ export default function CalendarPage() {
     }
   }, []);
 
+   // Helper to derive per-user localStorage keys
+   const getLocalKeys = async () => {
+    const currentUser = await authService.getCurrentUser();
+    const savedKey = currentUser ? `savedOutfits_${currentUser.id}` : 'savedOutfits';
+    const editingKey = currentUser ? `editingOutfit_${currentUser.id}` : 'editingOutfit';
+    return { savedKey, editingKey };
+   };
   useEffect(() => {
     // Refresh outfits when window gets focus (user navigates back from manual page)
     const handleFocus = () => {
@@ -113,7 +124,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     const fetchUser = async () => {
-      const token = authService.getToken();
+      const token = await authService.getToken();
       if (!token) {
         window.location.href = '/login';
         return;
@@ -295,7 +306,7 @@ export default function CalendarPage() {
       })
     : savedOutfits;
 
-  const handleWearToday = (outfitId: string) => {
+  const handleWearToday = async (outfitId: string) => {
     const updatedOutfits = savedOutfits.map(outfit => {
       if (outfit.id === outfitId) {
         return {
@@ -308,17 +319,27 @@ export default function CalendarPage() {
     });
     
     setSavedOutfits(updatedOutfits);
-    localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+    try {
+      const { savedKey } = await getLocalKeys();
+      localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+    } catch (e) {
+      localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+    }
     
     // Select today's date to show the moved outfit
     setSelectedDate(new Date());
   };
 
-  const handleEditOutfit = (outfit: any, event?: React.MouseEvent) => {
+  const handleEditOutfit = async (outfit: any, event?: React.MouseEvent) => {
     console.log('Edit button clicked for outfit:', outfit.name);
     event?.stopPropagation();
     // Store the outfit to be edited in localStorage for the manual page to pick up
-    localStorage.setItem('editingOutfit', JSON.stringify(outfit));
+    try {
+      const { editingKey } = await getLocalKeys();
+      localStorage.setItem(editingKey, JSON.stringify(outfit));
+    } catch (e) {
+      localStorage.setItem('editingOutfit', JSON.stringify(outfit));
+    }
     router.push('/dashboard/manual');
   };
 
@@ -331,12 +352,17 @@ export default function CalendarPage() {
       const token = await authService.getToken();
       console.log('Token retrieved:', token ? 'Yes' : 'No');
       
-      if (!token) {
+        if (!token) {
         console.error('No auth token available');
         // Fallback to localStorage only
         const updatedOutfits = savedOutfits.filter(outfit => outfit.id !== outfitId);
         setSavedOutfits(updatedOutfits);
-        localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+          try {
+            const { savedKey } = await getLocalKeys();
+            localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+          } catch (e) {
+            localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+          }
         setActiveDropdown(null);
         return;
       }
@@ -366,7 +392,12 @@ export default function CalendarPage() {
       // Remove from localStorage as well
       const updatedOutfits = savedOutfits.filter(outfit => outfit.id !== outfitId);
       setSavedOutfits(updatedOutfits);
-      localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+      try {
+        const { savedKey } = await getLocalKeys();
+        localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+      } catch (e) {
+        localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+      }
       setActiveDropdown(null);
       console.log('Outfit deleted successfully');
     } catch (error) {
@@ -375,8 +406,37 @@ export default function CalendarPage() {
       // Fallback to localStorage if API fails
       const updatedOutfits = savedOutfits.filter(outfit => outfit.id !== outfitId);
       setSavedOutfits(updatedOutfits);
-      localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+      try {
+        const { savedKey } = await getLocalKeys();
+        localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+      } catch (e) {
+        localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+      }
       setActiveDropdown(null);
+    }
+  };
+
+  // Handle downloading outfit image
+  const handleDownloadOutfit = async (outfit: any) => {
+    try {
+      const canvasImage = outfit.canvasImage || outfit.canvas_image;
+      if (!canvasImage) {
+        alert('No outfit image available to download');
+        return;
+      }
+
+      // Create a temporary link element for download
+      const link = document.createElement('a');
+      link.href = canvasImage;
+      link.download = `${outfit.name || 'outfit'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setActiveDropdown(null);
+    } catch (error) {
+      console.error('Error downloading outfit:', error);
+      alert('Failed to download outfit');
     }
   };
 
@@ -831,10 +891,15 @@ export default function CalendarPage() {
                         {activeDropdown === outfit.id && (
                           <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e?.stopPropagation();
                                 console.log('EDIT CLICKED - Inline function');
-                                localStorage.setItem('editingOutfit', JSON.stringify(outfit));
+                                try {
+                                  const { editingKey } = await getLocalKeys();
+                                  localStorage.setItem(editingKey, JSON.stringify(outfit));
+                                } catch (err) {
+                                  localStorage.setItem('editingOutfit', JSON.stringify(outfit));
+                                }
                                 router.push('/dashboard/manual');
                               }}
                               className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition rounded-t-lg"
@@ -853,12 +918,21 @@ export default function CalendarPage() {
                             <button
                               onClick={(e) => {
                                 e?.stopPropagation();
+                                handleDownloadOutfit(outfit);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition"
+                            >
+                              Download
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e?.stopPropagation();
                                 console.log('DELETE CLICKED - Inline function');
-                                
+
                                 // Try database delete first, then update localStorage
                                 const deleteOutfit = async () => {
                                   try {
-                                    const token = authService.getToken();
+                                    const token = await authService.getToken();
                                     if (token) {
                                       const response = await fetch('/api/outfits', {
                                         method: 'DELETE',
@@ -868,7 +942,7 @@ export default function CalendarPage() {
                                         },
                                         body: JSON.stringify({ id: outfit.id })
                                       });
-                                      
+
                                       if (response.ok) {
                                         console.log('Deleted from database successfully');
                                       }
@@ -876,15 +950,20 @@ export default function CalendarPage() {
                                   } catch (error) {
                                     console.log('Database delete failed, using localStorage only');
                                   }
-                                  
+
                                   // Always update localStorage and UI
                                   const updatedOutfits = savedOutfits.filter(o => o.id !== outfit.id);
                                   setSavedOutfits(updatedOutfits);
-                                  localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+                                  try {
+                                    const { savedKey } = await getLocalKeys();
+                                    localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+                                  } catch (err) {
+                                    localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+                                  }
                                   setActiveDropdown(null);
                                   console.log('Outfit deleted from localStorage and calendar');
                                 };
-                                
+
                                 deleteOutfit();
                               }}
                               className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition text-red-600 rounded-b-lg"
