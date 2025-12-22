@@ -18,6 +18,8 @@ export async function POST(request: NextRequest) {
   // Use per-call timeout promises (below) instead to fail requests safely.
 
   try {
+    // Will hold the timeout handle for the per-request timeout promise
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     // Get the current user from session
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.split(' ')[1];
@@ -102,7 +104,7 @@ export async function POST(request: NextRequest) {
       try {
         // Create a timeout promise
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Request timeout')), timeoutMs);
+          timeoutId = setTimeout(() => reject(new Error('Request timeout')), timeoutMs);
         });
         
         // Race between the API call and timeout
@@ -112,6 +114,8 @@ export async function POST(request: NextRequest) {
         });
         
         response = await Promise.race([apiPromise, timeoutPromise]);
+        // Clear the timeout once we have a response
+        if (timeoutId) clearTimeout(timeoutId);
         break; // Success, exit retry loop
       } catch (geminiError: any) {
         retryCount++;
