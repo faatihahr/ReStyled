@@ -68,7 +68,7 @@ export default function SettingsPage() {
         await preferencesService.saveUserPreferences({
           user_id: user.id,
           gender: formData.gender,
-          style: formData.style,
+          style: formData.style ? [formData.style] : [],
           height: formData.height,
           weight: formData.weight,
           skin_undertone: formData.skinUndertone

@@ -55,7 +55,7 @@ export default function QuestionnaireModal({ isOpen, onClose, onSubmit, onSkip }
     }
   ];
 
-  const handleOptionSelect = (field: keyof QuestionnaireData, value: string) => {
+  const handleOptionSelect = (field: string, value: string) => {
     if (field === 'style') {
       setFormData(prev => ({
         ...prev,
@@ -64,7 +64,7 @@ export default function QuestionnaireModal({ isOpen, onClose, onSubmit, onSkip }
           : [...prev.style, value]
       }));
     } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
+      setFormData(prev => ({ ...prev, [field as keyof QuestionnaireData]: value }));
     }
   };
 

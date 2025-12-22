@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { authService } from '@/services/authService';
 import { preferencesService } from '@/services/preferencesService';
 import { imageProcessingService } from '@/services/imageProcessingService';
@@ -40,7 +40,7 @@ const mockWardrobeItems: WardrobeItem[] = [
 ];
 
 export default function DashboardPage() {
-  const searchParams = useSearchParams();
+  // We'll read search params from `window.location.search` inside effects
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -169,7 +169,9 @@ export default function DashboardPage() {
 
   // Sync selected category from URL on mount and URL changes
   useEffect(() => {
-    const categoryFromUrl = searchParams.get('category');
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const categoryFromUrl = params.get('category');
     if (categoryFromUrl && activeNav === 'wardrobe') {
       const categoryUpper = categoryFromUrl.toUpperCase();
       const validCategory = categories.find(cat => cat.id === categoryUpper);
@@ -177,7 +179,7 @@ export default function DashboardPage() {
         setSelectedCategory(categoryUpper);
       }
     }
-  }, [searchParams, activeNav]);
+  }, [activeNav]);
 
   const handleQuestionnaireSubmit = async (data: any) => {
     try {

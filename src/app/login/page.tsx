@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { authService, LoginCredentials, AuthResponse } from '@/services/authService';
 
 export default function LoginPage() {
@@ -14,7 +14,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const images = [
     { src: '/images/loginPage/download (8).jpg', alt: 'Outfit 1' },
@@ -31,11 +30,11 @@ export default function LoginPage() {
   }, [images.length]);
 
   useEffect(() => {
-    const message = searchParams.get('message');
-    if (message) {
-      setSuccessMessage(message);
-    }
-  }, [searchParams]);
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const message = params.get('message');
+    if (message) setSuccessMessage(message);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
