@@ -33,9 +33,12 @@ export default function SettingsPage() {
         const userPreferences = await preferencesService.getUserPreferences(userData.id);
         if (userPreferences) {
           setPreferences(userPreferences);
+          const styleValue = Array.isArray(userPreferences.style)
+            ? (userPreferences.style[0] || '')
+            : (userPreferences.style || '');
           setFormData({
             gender: userPreferences.gender || '',
-            style: userPreferences.style || '',
+            style: styleValue,
             height: userPreferences.height || '',
             weight: userPreferences.weight || '',
             skinUndertone: userPreferences.skin_undertone || ''
