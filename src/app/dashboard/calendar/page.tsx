@@ -56,11 +56,26 @@ export default function CalendarPage() {
             console.log('Loaded outfits from database:', dbOutfits.length);
             
             // Convert database outfits to calendar format and merge with local outfits
+            // Avoid storing large embedded base64 canvas images in localStorage
+            const sanitizeCanvasImage = (val: any) => {
+              if (!val) return null;
+              if (typeof val !== 'string') return null;
+              // If it's already a public URL, keep it
+              if (val.startsWith('http')) return val;
+              // If it's an embedded data URL (base64), strip it to avoid localStorage quota overflow
+              if (val.startsWith('data:image')) {
+                console.warn('Stripping embedded canvas image from DB response to avoid localStorage quota');
+                return null;
+              }
+              // Fallback: if short string, keep; otherwise drop
+              return val.length < 20000 ? val : null;
+            };
+
             const formattedDbOutfits = dbOutfits.map((outfit: any) => ({
               id: outfit.id,
               name: outfit.name,
-              canvasImage: outfit.canvas_image,
-              canvas_image: outfit.canvas_image,
+              canvasImage: sanitizeCanvasImage(outfit.canvas_image),
+              canvas_image: sanitizeCanvasImage(outfit.canvas_image),
               date: outfit.created_at,
               createdAt: outfit.created_at,
               items: outfit.clothing_item_ids || [],
@@ -81,10 +96,11 @@ export default function CalendarPage() {
             
             setSavedOutfits(allOutfits);
             console.log('Total outfits after merge:', allOutfits.length);
+            saveToLocalWithFallback(localKey, allOutfits);
           } else {
             console.log('Failed to fetch from database, using localStorage only');
              setSavedOutfits(localOutfits);
-             localStorage.setItem(localKey, JSON.stringify(localOutfits));
+             saveToLocalWithFallback(localKey, localOutfits);
           }
         } else {
           console.log('No auth token, using localStorage only');
@@ -93,7 +109,7 @@ export default function CalendarPage() {
       } catch (dbError) {
         console.log('Database fetch failed, using localStorage only:', dbError);
          setSavedOutfits(localOutfits);
-         localStorage.setItem(localKey, JSON.stringify(localOutfits));
+         saveToLocalWithFallback(localKey, localOutfits);
       }
     } catch (error) {
       console.error('Error loading outfits:', error);
@@ -108,6 +124,53 @@ export default function CalendarPage() {
     const editingKey = currentUser ? `editingOutfit_${currentUser.id}` : 'editingOutfit';
     return { savedKey, editingKey };
    };
+
+  // Safe localStorage setter that strips large image fields or trims array on quota errors
+  const saveToLocalWithFallback = (key: string, array: any[]) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(array));
+      return true;
+    } catch (err: any) {
+      console.warn('localStorage setItem failed, attempting fallback:', err);
+      if (err && err.name === 'QuotaExceededError') {
+        try {
+          const stripped = array.map(item => {
+            const copy = { ...item };
+            if (copy.canvasImage) delete copy.canvasImage;
+            if (copy.canvas_image) delete copy.canvas_image;
+            return copy;
+          });
+          localStorage.setItem(key, JSON.stringify(stripped));
+          console.warn('Saved without canvas images to avoid quota overflow');
+          return true;
+        } catch (err2) {
+          console.warn('Retry after stripping canvas images failed:', err2);
+          try {
+            let trimmed = [...array];
+            while (trimmed.length > 0) {
+              trimmed.shift();
+              const attempt = trimmed.map(item => {
+                const copy = { ...item };
+                delete copy.canvasImage;
+                delete copy.canvas_image;
+                return copy;
+              });
+              try {
+                localStorage.setItem(key, JSON.stringify(attempt));
+                console.warn('Saved trimmed outfits to localStorage to avoid quota overflow');
+                return true;
+              } catch (e) {
+                // continue trimming
+              }
+            }
+          } catch (finalErr) {
+            console.error('Final fallback for localStorage failed:', finalErr);
+          }
+        }
+      }
+      return false;
+    }
+  };
   useEffect(() => {
     // Refresh outfits when window gets focus (user navigates back from manual page)
     const handleFocus = () => {
@@ -298,11 +361,17 @@ export default function CalendarPage() {
   };
 
   // Filter outfits for selected date or show all if no date selected
-  const filteredOutfits = selectedDate 
+  const parseOutfitDate = (outfit: any) => {
+    const raw = outfit.date || outfit.createdAt || outfit.created_at;
+    const d = raw ? new Date(raw) : new Date(NaN);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const filteredOutfits = selectedDate
     ? savedOutfits.filter(outfit => {
-        const outfitDate = new Date(outfit.date).toDateString();
-        const selected = selectedDate.toDateString();
-        return outfitDate === selected;
+        const outfitDateObj = parseOutfitDate(outfit);
+        if (!outfitDateObj) return false;
+        return outfitDateObj.toDateString() === selectedDate.toDateString();
       })
     : savedOutfits;
 
@@ -317,17 +386,27 @@ export default function CalendarPage() {
       }
       return outfit;
     });
-    
-    setSavedOutfits(updatedOutfits);
+
+    // Reorder so the worn outfit appears first (calendar shows the first match)
+    const movedIndex = updatedOutfits.findIndex(o => o.id === outfitId);
+    let reordered = [...updatedOutfits];
+    if (movedIndex > 0) {
+      const [moved] = reordered.splice(movedIndex, 1);
+      reordered.unshift(moved);
+    }
+
+    setSavedOutfits(reordered);
     try {
       const { savedKey } = await getLocalKeys();
-      localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+      saveToLocalWithFallback(savedKey, reordered);
     } catch (e) {
-      localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+      saveToLocalWithFallback('savedOutfits', reordered);
     }
-    
-    // Select today's date to show the moved outfit
-    setSelectedDate(new Date());
+
+    // Ensure the calendar is showing today's month and select today's date
+    const today = new Date();
+    setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedDate(today);
   };
 
   const handleEditOutfit = async (outfit: any, event?: React.MouseEvent) => {
@@ -357,12 +436,12 @@ export default function CalendarPage() {
         // Fallback to localStorage only
         const updatedOutfits = savedOutfits.filter(outfit => outfit.id !== outfitId);
         setSavedOutfits(updatedOutfits);
-          try {
-            const { savedKey } = await getLocalKeys();
-            localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
-          } catch (e) {
-            localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
-          }
+        try {
+          const { savedKey } = await getLocalKeys();
+          saveToLocalWithFallback(savedKey, updatedOutfits);
+        } catch (e) {
+          saveToLocalWithFallback('savedOutfits', updatedOutfits);
+        }
         setActiveDropdown(null);
         return;
       }
@@ -394,9 +473,9 @@ export default function CalendarPage() {
       setSavedOutfits(updatedOutfits);
       try {
         const { savedKey } = await getLocalKeys();
-        localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+        saveToLocalWithFallback(savedKey, updatedOutfits);
       } catch (e) {
-        localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+        saveToLocalWithFallback('savedOutfits', updatedOutfits);
       }
       setActiveDropdown(null);
       console.log('Outfit deleted successfully');
@@ -408,9 +487,9 @@ export default function CalendarPage() {
       setSavedOutfits(updatedOutfits);
       try {
         const { savedKey } = await getLocalKeys();
-        localStorage.setItem(savedKey, JSON.stringify(updatedOutfits));
+        saveToLocalWithFallback(savedKey, updatedOutfits);
       } catch (e) {
-        localStorage.setItem('savedOutfits', JSON.stringify(updatedOutfits));
+        saveToLocalWithFallback('savedOutfits', updatedOutfits);
       }
       setActiveDropdown(null);
     }
@@ -976,7 +1055,10 @@ export default function CalendarPage() {
                       
                       <h4 className="font-medium text-gray-800 mb-2">{outfit.name}</h4>
                       <p className="text-sm text-gray-500 mb-3">
-                        {new Date(outfit.date).toLocaleDateString()}
+                        {(() => {
+                          const d = parseOutfitDate(outfit);
+                          return d ? d.toLocaleDateString() : 'Unknown date';
+                        })()}
                       </p>
                       <div className="mb-3">
                         {outfit.canvasImage || outfit.canvas_image ? (

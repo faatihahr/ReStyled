@@ -382,7 +382,28 @@ export class ClarifaiClassifier {
     // For now, use basic analysis. In production, you could use multiple Clarifai models
     // for color detection, pattern recognition, etc.
     return {
-      category: classification.category.toUpperCase(),
+      // Prefer specific wardrobe categories when possible: map Clarifai subcategories
+      // like 'pants' or 'skirt' to our frontend categories ('PANTS', 'SKIRTS'),
+      // otherwise fall back to the generic category.
+      category: (() => {
+        const sub = (classification.subcategory || '').toLowerCase();
+        const cat = (classification.category || '').toLowerCase();
+
+        const pantsSubcats = ['pants', 'jeans', 'trousers', 'shorts', 'leggings'];
+        if (pantsSubcats.includes(sub)) return 'PANTS';
+        if (sub === 'skirt') return 'SKIRTS';
+        if (sub === 'dress' || sub.includes('dress')) return 'DRESS';
+
+        // If original category is 'bottoms' but subcategory exists and isn't generic,
+        // prefer the subcategory name uppercased (useful for explicit labels).
+        if (cat === 'bottoms' && sub && sub !== 'top' && sub !== 'clothing') {
+          // Map some subcategory names to closest frontend categories
+          if (sub === 'jeans') return 'PANTS';
+          return sub.toUpperCase();
+        }
+
+        return classification.category.toUpperCase();
+      })(),
       styles: this.inferStyles(classification.predicted_label),
       confidence: classification.confidence,
       description: `${classification.predicted_label} - ${classification.confidence.toFixed(2)} confidence`,

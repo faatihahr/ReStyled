@@ -14,10 +14,8 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export async function POST(request: NextRequest) {
-  // Set overall request timeout
-  const timeoutId = setTimeout(() => {
-    throw new Error('Request timeout - AI styling took too long');
-  }, 60000); // 60 seconds total timeout
+  // NOTE: avoid throwing from a setTimeout (uncaughtException).
+  // Use per-call timeout promises (below) instead to fail requests safely.
 
   try {
     // Get the current user from session
@@ -25,7 +23,6 @@ export async function POST(request: NextRequest) {
     const token = authHeader?.split(' ')[1];
 
     if (!token) {
-      clearTimeout(timeoutId);
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
 
@@ -48,12 +45,10 @@ export async function POST(request: NextRequest) {
 
     if (wardrobeError) {
       console.error('Database error:', wardrobeError);
-      clearTimeout(timeoutId);
       return NextResponse.json({ error: 'Failed to fetch wardrobe items' }, { status: 500 });
     }
 
     if (!wardrobeItems || wardrobeItems.length === 0) {
-      clearTimeout(timeoutId);
       return NextResponse.json({ 
         error: 'No wardrobe items found',
         message: 'Please upload some clothing items first to get AI recommendations'
@@ -84,7 +79,6 @@ export async function POST(request: NextRequest) {
     const cached = aiResponseCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       console.log('Returning cached AI response');
-      clearTimeout(timeoutId);
       return NextResponse.json({
         success: true,
         outfits: cached.data,
@@ -138,7 +132,6 @@ export async function POST(request: NextRequest) {
             timestamp: Date.now()
           });
           
-          clearTimeout(timeoutId);
           return NextResponse.json({
             success: true,
             outfits: fallbackOutfit,
@@ -198,7 +191,6 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    clearTimeout(timeoutId);
     console.error('AI styling error:', error);
     
     // Handle timeout specifically
@@ -213,8 +205,6 @@ export async function POST(request: NextRequest) {
       error: 'Failed to generate outfit recommendations',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 

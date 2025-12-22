@@ -52,11 +52,19 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // Set overall request timeout for outfit saving
-  const timeoutId = setTimeout(() => {
-    throw new Error('Request timeout - Outfit saving took too long');
-  }, 45000); // 45 seconds timeout for image uploads
-
+  // NOTE: avoid throwing from setTimeout (uncaughtException).
+  // Large base64 canvas payloads may be slow — consider uploading to storage instead.
+  let clientAborted = false;
+  try {
+    if (request?.signal) {
+      request.signal.addEventListener('abort', () => {
+        clientAborted = true;
+        console.warn('Client aborted the request (clientAborted=true)');
+      });
+    }
+  } catch (e) {
+    // ignore if signal not present
+  }
   try {
     console.log('POST /api/outfits - Starting request');
     
@@ -64,7 +72,6 @@ export async function POST(request: NextRequest) {
     console.log('Token received:', token ? 'Yes' : 'No');
     
     if (!token) {
-      clearTimeout(timeoutId);
       console.log('No token provided');
       return NextResponse.json({ error: 'No token provided' }, { status: 401 });
     }
@@ -86,7 +93,6 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     
     if (userError || !user) {
-      clearTimeout(timeoutId);
       console.log('Invalid token or user error:', userError);
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
@@ -114,14 +120,12 @@ export async function POST(request: NextRequest) {
         });
       
       if (createUserError) {
-        clearTimeout(timeoutId);
         console.error('Error creating user:', createUserError);
         return NextResponse.json({ error: 'Failed to create user record' }, { status: 500 });
       }
       
       console.log('User created successfully');
     } else if (userCheckError) {
-      clearTimeout(timeoutId);
       console.error('Error checking user:', userCheckError);
       return NextResponse.json({ error: 'Failed to verify user' }, { status: 500 });
     } else {
@@ -157,7 +161,6 @@ export async function POST(request: NextRequest) {
     console.log(`Mapped occasion "${occasion}" to "${mappedOccasion}"`);
 
     if (!name || !clothing_item_ids || !Array.isArray(clothing_item_ids)) {
-      clearTimeout(timeoutId);
       console.log('Missing required fields:', { name, clothing_item_ids });
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -166,6 +169,54 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Creating outfit data...');
+    let canvasImageToSave: string | null = null;
+
+    if (canvas_image && typeof canvas_image === 'string') {
+      console.log('Canvas image payload size (chars):', canvas_image.length);
+
+      // If payload is a data URL (base64), upload to Supabase Storage and store public URL instead
+      if (canvas_image.startsWith('data:image')) {
+        try {
+          // Extract base64 data
+          const matches = canvas_image.match(/^data:(image\/\w+);base64,(.+)$/);
+          if (matches) {
+            const contentType = matches[1];
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+
+            const fileExt = contentType.split('/')[1] || 'png';
+            const fileName = `${user.id}/outfits/outfit-${Date.now()}.${fileExt}`;
+
+            console.log('Uploading canvas image to storage as', fileName);
+            const { error: uploadError } = await supabaseClient.storage
+              .from('clothing-images')
+              .upload(fileName, buffer, { contentType, upsert: true });
+
+            if (uploadError) {
+              console.error('Storage upload failed:', uploadError);
+              // Fall back to storing base64 in DB if upload fails
+              canvasImageToSave = canvas_image;
+            } else {
+              const { data: { publicUrl } } = supabaseClient.storage
+                .from('clothing-images')
+                .getPublicUrl(fileName);
+
+              canvasImageToSave = publicUrl;
+              console.log('Canvas image uploaded, public URL:', publicUrl);
+            }
+          } else {
+            console.warn('Canvas image looks like data URL but regex failed; saving raw string');
+            canvasImageToSave = canvas_image;
+          }
+        } catch (err) {
+          console.error('Error uploading canvas image to storage:', err);
+          canvasImageToSave = canvas_image;
+        }
+      } else {
+        // Not a data URL, store as-is (could be a URL already)
+        canvasImageToSave = canvas_image;
+      }
+    }
     const outfitData = {
       name,
       description: description || '',
@@ -173,7 +224,7 @@ export async function POST(request: NextRequest) {
       clothing_item_ids,
       occasion: mappedOccasion,
       season: season || 'all',
-      canvas_image: canvas_image || null,
+      canvas_image: canvasImageToSave || null,
       weather_suitable: [],
       style_tags: [],
       ai_generated: false,
@@ -184,13 +235,23 @@ export async function POST(request: NextRequest) {
     };
 
     console.log('Saving outfit to database...', outfitData);
-    const outfit = await createOutfit(outfitData);
-    console.log('Outfit saved successfully:', outfit);
-    
-    clearTimeout(timeoutId);
-    return NextResponse.json({ outfit });
+    let savedOutfit: any = null;
+    try {
+      savedOutfit = await createOutfit(outfitData);
+      console.log('Outfit saved successfully:', savedOutfit);
+    } catch (dbErr) {
+      console.error('Database save failed:', dbErr);
+      throw dbErr;
+    }
+
+    // If client aborted but server completed saving, return success payload so client can recover
+    if (clientAborted) {
+      console.warn('Client disconnected before response but outfit was saved');
+      return NextResponse.json({ outfit: savedOutfit, warning: 'Client disconnected but outfit saved on server' });
+    }
+
+    return NextResponse.json({ outfit: savedOutfit });
   } catch (error) {
-    clearTimeout(timeoutId);
     console.error('Error saving outfit:', error);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
@@ -201,10 +262,15 @@ export async function POST(request: NextRequest) {
       error.message.includes('timeout')
     )) {
       console.log('Connection reset/timeout error detected');
-      return NextResponse.json({ 
-        error: 'Connection interrupted during outfit saving',
-        details: 'The request was interrupted. Please check your internet connection and try again.'
-      }, { status: 408 });
+      // If we managed to save before the error, try to return that info
+      try {
+        return NextResponse.json({ 
+          error: 'Connection interrupted during outfit saving',
+          details: 'The request was interrupted. Please check your internet connection and try again.'
+        }, { status: 408 });
+      } catch (e) {
+        return NextResponse.json({ error: 'Connection interrupted' }, { status: 408 });
+      }
     }
     
     return NextResponse.json(
@@ -212,7 +278,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    clearTimeout(timeoutId);
+    // No global timeout to clear
   }
 }
 

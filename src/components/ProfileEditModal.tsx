@@ -19,13 +19,21 @@ export default function ProfileEditModal({ isOpen, onClose, user, onSave }: Prof
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Update states when user data changes
+  // Update states when user data changes, but don't overwrite local file previews
+  // Keep dependency array stable (only `user`) to avoid HMR/react-refresh warnings
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (user) {
       setName(user?.name || '');
       setUsername(user?.username || '');
-      setProfileImage(user?.profile_picture || user?.user_metadata?.profile_picture || '');
-      setHeaderImage(user?.header_image || user?.user_metadata?.header_image || '');
+
+      // Only set profile/header images from user if the user hasn't selected a new file locally
+      if (!profileImageFile) {
+        setProfileImage(user?.profile_picture || user?.user_metadata?.profile_picture || '');
+      }
+      if (!headerImageFile) {
+        setHeaderImage(user?.header_image || user?.user_metadata?.header_image || '');
+      }
     }
   }, [user]);
 
@@ -144,12 +152,13 @@ export default function ProfileEditModal({ isOpen, onClose, user, onSave }: Prof
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-semibold mb-4">Edit Profile</h2>
-        
-        {/* Profile Preview */}
-        <div className="mb-6">
+    <div className="fixed inset-0 bg-gradient-to-br from-[#aace67]/30 via-pink-200/30 to-[#ffa4a4]/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto font-merriweather">
+        <div className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Edit Profile</h2>
+          
+          {/* Profile Preview */}
+          <div className="mb-6">
           <div className="bg-gradient-to-r from-green-200 to-blue-200 h-24 rounded-lg relative mb-4">
             {headerImage && (
               <img 
@@ -253,6 +262,7 @@ export default function ProfileEditModal({ isOpen, onClose, user, onSave }: Prof
           >
             {isLoading ? 'Saving...' : 'Save'}
           </button>
+        </div>
         </div>
       </div>
     </div>

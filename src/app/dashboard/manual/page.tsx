@@ -376,6 +376,55 @@ export default function ManualStylingPage() {
     setShowCanvas(true);
   };
 
+  // Save helper that handles QuotaExceededError by stripping large fields
+  const saveToLocalWithFallback = (key: string, array: any[]) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(array));
+      return true;
+    } catch (err: any) {
+      console.warn('localStorage setItem failed, attempting fallback:', err);
+      // If quota exceeded, try removing large fields like canvasImage
+      if (err && err.name === 'QuotaExceededError') {
+        try {
+          const stripped = array.map(item => {
+            const copy = { ...item };
+            if (copy.canvasImage) delete copy.canvasImage;
+            if (copy.canvas_image) delete copy.canvas_image;
+            return copy;
+          });
+          localStorage.setItem(key, JSON.stringify(stripped));
+          console.warn('Saved without canvas images to avoid quota overflow');
+          return true;
+        } catch (err2: any) {
+          console.warn('Retry after stripping canvas images failed:', err2);
+          // As last resort, try trimming oldest entries until it fits
+          try {
+            let trimmed = [...array];
+            while (trimmed.length > 0) {
+              trimmed.shift();
+              const attempt = trimmed.map(item => {
+                const copy = { ...item };
+                delete copy.canvasImage;
+                delete copy.canvas_image;
+                return copy;
+              });
+              try {
+                localStorage.setItem(key, JSON.stringify(attempt));
+                console.warn('Saved trimmed outfits to localStorage to avoid quota overflow');
+                return true;
+              } catch (e) {
+                // continue trimming
+              }
+            }
+          } catch (finalErr) {
+            console.error('Final fallback for localStorage failed:', finalErr);
+          }
+        }
+      }
+      return false;
+    }
+  };
+
   const handleFinalSave = async (outfitData: any) => {
     console.log('handleFinalSave called with outfitData:', outfitData);
     
@@ -440,7 +489,7 @@ export default function ManualStylingPage() {
               
               if (outfitIndex >= 0) {
                 existingOutfits[outfitIndex] = updatedOutfit;
-                localStorage.setItem(savedKey, JSON.stringify(existingOutfits));
+                saveToLocalWithFallback(savedKey, existingOutfits);
               }
             } else {
               console.log('Database outfit updated - no localStorage save needed');
@@ -469,7 +518,7 @@ export default function ManualStylingPage() {
         
         if (outfitIndex >= 0) {
           existingOutfits[outfitIndex] = updatedOutfit;
-          localStorage.setItem(savedKey, JSON.stringify(existingOutfits));
+          saveToLocalWithFallback(savedKey, existingOutfits);
         }
         
         setShowCanvas(false);
@@ -522,7 +571,7 @@ export default function ManualStylingPage() {
         };
         
         savedOutfits.push(newOutfit);
-        localStorage.setItem(savedKey, JSON.stringify(savedOutfits));
+        saveToLocalWithFallback(savedKey, savedOutfits);
         console.log('Outfit saved to localStorage for testing:', newOutfit);
         
         setShowCanvas(false);
@@ -548,7 +597,7 @@ export default function ManualStylingPage() {
       };
       
       savedOutfits.push(newOutfit);
-      localStorage.setItem(savedKey, JSON.stringify(savedOutfits));
+      saveToLocalWithFallback(savedKey, savedOutfits);
       console.log('Outfit saved to localStorage:', newOutfit);
       
       setShowCanvas(false);
@@ -576,7 +625,7 @@ export default function ManualStylingPage() {
           existingOutfits.push(outfitData);
         }
         
-        localStorage.setItem(savedKey, JSON.stringify(existingOutfits));
+        saveToLocalWithFallback(savedKey, existingOutfits);
       } catch (localStorageError) {
         console.error('Error saving outfit to localStorage:', localStorageError);
       }

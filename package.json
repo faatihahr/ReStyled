@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "migrate:canvas": "node scripts/migrate-canvas-images.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
