@@ -434,9 +434,10 @@ export default function ManualStylingPage() {
     }
     
     console.log('Saving outfit with canvas image:', outfitData.canvasImage ? 'Yes' : 'No');
-    
+    // Key used for localStorage; declare here so it's available in catch/fallbacks
+    const savedKey = user?.id ? `savedOutfits_${user.id}` : 'savedOutfits';
+
     try {
-      const savedKey = user?.id ? `savedOutfits_${user.id}` : 'savedOutfits';
       if (isEditingMode && editingOutfit) {
         // Update existing outfit
         const token = await authService.getToken();
