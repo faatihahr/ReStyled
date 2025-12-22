@@ -9,7 +9,7 @@ const supabase = createClient(
 // GET - Fetch single wardrobe item by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -25,6 +25,7 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
     }
 
+    const params = await context.params;
     const itemId = params.id;
 
     // Fetch the specific wardrobe item
